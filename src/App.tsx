@@ -158,7 +158,12 @@ export function App() {
       maxPlayers: incomingRoom.maxPlayers || 8,
       isPublic: incomingRoom.isPublic !== false,
       turnDuration: typeof incomingRoom.turnDuration === 'number' ? incomingRoom.turnDuration : 15.0,
+      totalRounds: incomingRoom.totalRounds || prevRoom?.totalRounds || 3,
+      roundTime: incomingRoom.roundTime || prevRoom?.roundTime || 90,
       round: incomingRoom.round || 1,
+      starterChar: incomingRoom.starterChar || prevRoom?.starterChar,
+      roundHistoryWords: incomingRoom.roundHistoryWords || prevRoom?.roundHistoryWords,
+      lastWord: incomingRoom.lastWord !== undefined ? incomingRoom.lastWord : prevRoom?.lastWord,
       currentTurnIndex: typeof incomingRoom.currentTurnIndex === 'number' ? incomingRoom.currentTurnIndex : 0,
       usedWords: Array.isArray(incomingRoom.usedWords) ? incomingRoom.usedWords : [],
       wordChain: Array.isArray(incomingRoom.wordChain) ? incomingRoom.wordChain : [],
@@ -490,24 +495,57 @@ export function App() {
         } else if (type === 'START_GAME') {
           setActiveRoom((prev) => {
             if (!prev) return prev;
+            const starter = data?.starterChar || data?.room?.starterChar || '수';
+            const totalRounds = data?.totalRounds || data?.room?.totalRounds || prev.totalRounds || 3;
+            const history = data?.roundHistoryWords || data?.room?.roundHistoryWords || [starter, ...Array(totalRounds - 1).fill('?')];
             return normalizeRoomState({
               ...prev,
               status: 'PLAYING',
               round: 1,
+              totalRounds,
+              starterChar: starter,
+              roundHistoryWords: history,
               currentTurnIndex: 0,
               wordChain: [],
               usedWords: [],
-              lastWord: undefined,
+              lastWord: starter,
               turnDuration: 15.0,
               currentPlayers: prev.currentPlayers.map((p) => ({
                 ...p,
                 isAlive: true,
                 score: 0,
                 wordsUsed: [],
+                eliminatedReason: undefined,
               })),
             }, prev) || prev;
           });
           sounds.playGameStart();
+        } else if (type === 'START_NEXT_ROUND') {
+          setActiveRoom((prev) => {
+            if (!prev) return prev;
+            const nextRound = data?.round || (prev.round + 1);
+            const starter = data?.starterChar || '벌';
+            const totalRounds = prev.totalRounds || 3;
+            const history = data?.roundHistoryWords || [...(prev.roundHistoryWords || Array(totalRounds).fill('?'))];
+            history[nextRound - 1] = starter;
+
+            return normalizeRoomState({
+              ...prev,
+              round: nextRound,
+              starterChar: starter,
+              lastWord: starter,
+              roundHistoryWords: history,
+              currentTurnIndex: 0,
+              turnDuration: 15.0,
+              wordChain: [],
+              usedWords: [],
+              currentPlayers: prev.currentPlayers.map((p) => ({
+                ...p,
+                isAlive: true,
+                eliminatedReason: undefined,
+              })),
+            }, prev) || prev;
+          });
         } else if (type === 'SUBMIT_WORD' && data?.item) {
           const newItem: WordChainItem = data.item;
           setActiveRoom((prev) => {
@@ -523,7 +561,7 @@ export function App() {
               if (p.id === newItem.playerId) {
                 return {
                   ...p,
-                  score: p.score + newItem.word.length * 100 + (newItem.isDueum ? 50 : 0),
+                  score: p.score + newItem.word.length * 10 + (newItem.isDueum ? 5 : 0),
                   wordsUsed: [...p.wordsUsed, newItem.word],
                 };
               }
@@ -553,28 +591,63 @@ export function App() {
         } else if (type === 'PLAYER_TIMEOUT' && data?.targetPlayerId) {
           setActiveRoom((prev) => {
             if (!prev) return prev;
+            const penalty = 100;
             const updatedPlayers = prev.currentPlayers.map((p) =>
-              p.id === data.targetPlayerId ? { ...p, isAlive: false, eliminatedReason: '시간 초과' } : p
+              p.id === data.targetPlayerId
+                ? { ...p, score: p.score - penalty, isAlive: false, eliminatedReason: '시간 초과 (-100점)' }
+                : p
             );
             const alive = updatedPlayers.filter((p) => p.isAlive);
-            let nextStatus = prev.status;
-            let nextIdx = prev.currentTurnIndex;
+            const totalRounds = prev.totalRounds || 3;
+            const currentRound = prev.round || 1;
 
             if (alive.length <= 1 && updatedPlayers.length > 1) {
-              nextStatus = 'FINISHED';
-              setIsGameOverOpen(true);
+              if (currentRound < totalRounds) {
+                const nextRound = currentRound + 1;
+                const candidateStarters = ['수', '박', '벌', '꽃', '물', '하', '봄', '별', '달', '산', '해', '구', '눈'];
+                const nextStarter = data?.nextStarter || candidateStarters[Math.floor(Math.random() * candidateStarters.length)];
+                const history = [...(prev.roundHistoryWords || Array(totalRounds).fill('?'))];
+                history[nextRound - 1] = nextStarter;
+
+                return normalizeRoomState({
+                  ...prev,
+                  round: nextRound,
+                  starterChar: nextStarter,
+                  lastWord: nextStarter,
+                  roundHistoryWords: history,
+                  currentTurnIndex: 0,
+                  turnDuration: 15.0,
+                  wordChain: [],
+                  usedWords: [],
+                  currentPlayers: updatedPlayers.map((p) => ({
+                    ...p,
+                    isAlive: true,
+                    eliminatedReason: undefined,
+                  })),
+                }, prev) || prev;
+              } else {
+                setIsGameOverOpen(true);
+                return normalizeRoomState({
+                  ...prev,
+                  status: 'FINISHED',
+                  currentPlayers: updatedPlayers,
+                }, prev) || prev;
+              }
             } else if (alive.length > 0) {
-              nextIdx = (prev.currentTurnIndex + 1) % updatedPlayers.length;
+              let nextIdx = (prev.currentTurnIndex + 1) % updatedPlayers.length;
               while (!updatedPlayers[nextIdx].isAlive) {
                 nextIdx = (nextIdx + 1) % updatedPlayers.length;
               }
+              return normalizeRoomState({
+                ...prev,
+                currentTurnIndex: nextIdx,
+                currentPlayers: updatedPlayers,
+              }, prev) || prev;
             }
 
             return normalizeRoomState({
               ...prev,
-              status: nextStatus,
               currentPlayers: updatedPlayers,
-              currentTurnIndex: nextIdx,
             }, prev) || prev;
           });
           sounds.playTimeout();
@@ -1003,8 +1076,17 @@ export function App() {
 
     setActiveRoom(updatedRoom);
     sounds.playPop();
-    sendRoomAction('START_GAME', { starterChar: initialStarter, totalRounds });
+    sendRoomAction('START_GAME', {
+      starterChar: initialStarter,
+      totalRounds,
+      roundHistoryWords: historyStarters,
+    });
     saveRoomToServer(updatedRoom);
+    broadcastRoomEvent('START_GAME', {
+      starterChar: initialStarter,
+      totalRounds,
+      roundHistoryWords: historyStarters,
+    });
     broadcastRoomEvent('SYNC_ROOM', { room: updatedRoom });
   };
 
@@ -1163,8 +1245,17 @@ export function App() {
         };
 
         setActiveRoom(nextRoundRoom);
-        sendRoomAction('START_NEXT_ROUND', { round: nextRound, starterChar: nextStarter });
+        sendRoomAction('START_NEXT_ROUND', {
+          round: nextRound,
+          starterChar: nextStarter,
+          roundHistoryWords: updatedHistory,
+        });
         saveRoomToServer(nextRoundRoom);
+        broadcastRoomEvent('START_NEXT_ROUND', {
+          round: nextRound,
+          starterChar: nextStarter,
+          roundHistoryWords: updatedHistory,
+        });
         broadcastRoomEvent('SYNC_ROOM', { room: nextRoundRoom });
         return;
       }

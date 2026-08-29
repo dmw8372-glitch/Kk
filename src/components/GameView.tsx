@@ -136,7 +136,7 @@ export const GameView: React.FC<GameViewProps> = ({
 
       if (remaining <= 0) {
         if (timerRef.current) clearInterval(timerRef.current);
-        if (activePlayer && activePlayer.isAlive) {
+        if (activePlayer && activePlayer.isAlive && (isMyTurn || room.hostId === currentPlayerId)) {
           sounds.playWrong();
           onPlayerTimeout(activePlayer.id);
         }

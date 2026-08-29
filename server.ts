@@ -35,6 +35,9 @@ interface ServerGameRoom {
   isPublic: boolean;
   turnDuration: number;
   round: number;
+  totalRounds?: number;
+  starterChar?: string;
+  roundHistoryWords?: string[];
   currentTurnIndex: number;
   lastWord?: string;
   usedWords: string[];
@@ -429,20 +432,53 @@ app.post('/api/rooms/:id/action', (req, res) => {
     }
   } else if (action === 'START_GAME') {
     if (room.hostId === senderId && room.currentPlayers.length >= 2) {
+      const { starterChar, totalRounds, roundHistoryWords } = payload || {};
+      const actualStarter = starterChar || '수';
+      const actualTotalRounds = totalRounds || room.totalRounds || 3;
+      const actualHistory = roundHistoryWords || [actualStarter, ...Array(actualTotalRounds - 1).fill('?')];
+
       room.status = 'PLAYING';
       room.round = 1;
+      room.totalRounds = actualTotalRounds;
+      room.starterChar = actualStarter;
+      room.roundHistoryWords = actualHistory;
       room.currentTurnIndex = 0;
       room.wordChain = [];
       room.usedWords = [];
-      room.lastWord = undefined;
+      room.lastWord = actualStarter;
       room.turnDuration = 15.0;
       room.currentPlayers = room.currentPlayers.map((p) => ({
         ...p,
         isAlive: true,
         score: 0,
         wordsUsed: [],
+        eliminatedReason: undefined,
       }));
     }
+  } else if (action === 'START_NEXT_ROUND') {
+    const { round, starterChar, roundHistoryWords } = payload || {};
+    const nextRound = round || (room.round + 1);
+    const nextStarter = starterChar || '벌';
+    room.round = nextRound;
+    room.starterChar = nextStarter;
+    room.lastWord = nextStarter;
+    if (roundHistoryWords) {
+      room.roundHistoryWords = roundHistoryWords;
+    } else {
+      if (!room.roundHistoryWords) {
+        room.roundHistoryWords = Array(room.totalRounds || 3).fill('?');
+      }
+      room.roundHistoryWords[nextRound - 1] = nextStarter;
+    }
+    room.currentPlayers = room.currentPlayers.map((p) => ({
+      ...p,
+      isAlive: true,
+      eliminatedReason: undefined,
+    }));
+    room.currentTurnIndex = 0;
+    room.wordChain = [];
+    room.usedWords = [];
+    room.turnDuration = 15.0;
   } else if (action === 'SUBMIT_WORD') {
     const { word, isDueum, matchedChar, definition, pos, playerName, playerColor } = payload;
     if (word && !room.usedWords.includes(word)) {
@@ -467,12 +503,12 @@ app.post('/api/rooms/:id/action', (req, res) => {
       const newDuration = Math.max(5.0, Number((15.0 - (room.wordChain.length * 0.2)).toFixed(1)));
       room.turnDuration = newDuration;
 
-      // Update player score & wordsUsed
+      // Update player score & wordsUsed (10 points per char + 5 dueum bonus)
       room.currentPlayers = room.currentPlayers.map((p) => {
         if (p.id === senderId) {
           return {
             ...p,
-            score: p.score + word.length * 100 + (isDueum ? 50 : 0),
+            score: p.score + word.length * 10 + (isDueum ? 5 : 0),
             wordsUsed: [...p.wordsUsed, word],
           };
         }
@@ -491,13 +527,49 @@ app.post('/api/rooms/:id/action', (req, res) => {
     }
   } else if (action === 'PLAYER_TIMEOUT') {
     const { targetPlayerId } = payload;
+    const penaltyPoints = 100;
     room.currentPlayers = room.currentPlayers.map((p) =>
-      p.id === targetPlayerId ? { ...p, isAlive: false, eliminatedReason: '시간 초과 (5초 경과)' } : p
+      p.id === targetPlayerId
+        ? {
+            ...p,
+            score: p.score - penaltyPoints,
+            isAlive: false,
+            eliminatedReason: '시간 초과 (-100점)',
+          }
+        : p
     );
 
     const alive = room.currentPlayers.filter((p) => p.isAlive);
+    const totalRounds = room.totalRounds || 3;
+    const currentRound = room.round || 1;
+
     if (alive.length <= 1 && room.currentPlayers.length > 1) {
-      room.status = 'FINISHED';
+      if (currentRound < totalRounds) {
+        // Round Finished -> Next Round with unified starter char
+        const nextRound = currentRound + 1;
+        const candidateStarters = ['수', '박', '벌', '꽃', '물', '하', '봄', '별', '달', '산', '해', '구', '눈'];
+        const nextStarter = candidateStarters[Math.floor(Math.random() * candidateStarters.length)];
+
+        if (!room.roundHistoryWords) {
+          room.roundHistoryWords = Array(totalRounds).fill('?');
+        }
+        room.roundHistoryWords[nextRound - 1] = nextStarter;
+        room.round = nextRound;
+        room.starterChar = nextStarter;
+        room.lastWord = nextStarter;
+        room.currentPlayers = room.currentPlayers.map((p) => ({
+          ...p,
+          isAlive: true,
+          eliminatedReason: undefined,
+        }));
+        room.currentTurnIndex = 0;
+        room.usedWords = [];
+        room.wordChain = [];
+        room.turnDuration = 15.0;
+      } else {
+        // Game Finished
+        room.status = 'FINISHED';
+      }
     } else if (alive.length > 0) {
       let nextIdx = (room.currentTurnIndex + 1) % room.currentPlayers.length;
       while (!room.currentPlayers[nextIdx].isAlive) {
@@ -512,6 +584,7 @@ app.post('/api/rooms/:id/action', (req, res) => {
     room.wordChain = [];
     room.usedWords = [];
     room.lastWord = undefined;
+    room.starterChar = undefined;
     room.turnDuration = 15.0;
     room.currentPlayers = room.currentPlayers.map((p) => ({
       ...p,
