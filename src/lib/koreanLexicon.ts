@@ -24,6 +24,8 @@ export const KOREAN_LEXICON_EXPANDED: DictionaryWord[] = [
   { word: '겨울', pos: '명사', meaning: '가을과 봄 사이의 추운 계절.', length: 2, firstChar: '겨', lastChar: '울', origin: '고유어', source: 'LEXICON' },
   { word: '고양이', pos: '명사', meaning: '식육목 고양잇과의 포유류.', length: 3, firstChar: '고', lastChar: '이', origin: '고유어', source: 'LEXICON' },
   { word: '고구마', pos: '명사', meaning: '뿌리를 식용하는 메꽃과의 한해살이 덩굴풀.', length: 3, firstChar: '고', lastChar: '마', origin: '고유어', source: 'LEXICON' },
+  { word: '고지식', pos: '명사/어근', meaning: '성질이 곧고 융통성이 없음. 또는 그런 성질이나 사람.', length: 3, firstChar: '고', lastChar: '식', origin: '고유어', source: 'LEXICON' },
+  { word: '고려', pos: '명사(고유명사)', meaning: '918년 왕건이 건국하여 1392년까지 이어진 한국의 왕조.', length: 2, firstChar: '고', lastChar: '려', origin: '고유명사', source: 'LEXICON' },
   { word: '곡수', pos: '명사', meaning: '굽이굽이 휘돌아 흐르는 물 또는 골짜기에서 흐르는 물.', length: 2, firstChar: '곡', lastChar: '수', origin: '한자어', source: 'LEXICON' },
   { word: '곡물', pos: '명사', meaning: '사람의 식량이 되는 쌀, 보리, 콩, 조 따위의 열매.', length: 2, firstChar: '곡', lastChar: '물', origin: '한자어', source: 'LEXICON' },
   { word: '곰인형', pos: '명사', meaning: '곰 모양으로 만든 푹신한 인형.', length: 3, firstChar: '곰', lastChar: '형', origin: '혼종어', source: 'LEXICON' },

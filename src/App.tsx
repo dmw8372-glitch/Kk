@@ -1111,11 +1111,11 @@ export function App() {
   const handlePlayerTimeout = (playerId: string) => {
     if (!activeRoom) return;
 
-    const penaltyPoints = 74;
+    const penaltyPoints = 100;
     const currentChainLength = activeRoom.wordChain ? activeRoom.wordChain.length : 0;
     const currentTurnDuration = Math.max(5.0, Number((15.0 - currentChainLength * 0.2).toFixed(1)));
 
-    // Score deduction for loser
+    // Score deduction for loser (-100점)
     const updatedPlayers = activeRoom.currentPlayers.map((p) => {
       if (p.id === playerId) {
         return {
