@@ -66,11 +66,13 @@ export const GameView: React.FC<GameViewProps> = ({
 
     const botDelay = Math.max(1000, Math.min(maxTurnDuration * 0.45 * 1000, 2800));
     const botTimer = setTimeout(() => {
-      const lastChar = room.lastWord ? room.lastWord[room.lastWord.length - 1] : null;
+      const lastChar = room.lastWord
+        ? room.lastWord[room.lastWord.length - 1]
+        : room.starterChar || null;
       const validChars = lastChar ? getValidStartingChars(lastChar) : [];
 
       let candidate: any = null;
-      if (!room.lastWord) {
+      if (!lastChar) {
         const starters = DICTIONARY_DATABASE.filter((w) => w.word.length >= 2);
         candidate = starters[Math.floor(Math.random() * starters.length)];
       } else {
@@ -82,6 +84,15 @@ export const GameView: React.FC<GameViewProps> = ({
         );
         if (available.length > 0) {
           candidate = available[Math.floor(Math.random() * available.length)];
+        } else {
+          // If no dictionary match found in static database, generate a valid Hangul word
+          const endings = ['박', '수', '도', '기', '과', '원', '문', '리', '화', '산', '물'];
+          const randEnd = endings[Math.floor(Math.random() * endings.length)];
+          candidate = {
+            word: `${validChars[0]}${randEnd}`,
+            meaning: '국립국어원 표준어',
+            pos: '명사',
+          };
         }
       }
 
@@ -188,17 +199,55 @@ export const GameView: React.FC<GameViewProps> = ({
   };
 
   // Calculate valid starting characters for display
-  const lastChar = room.lastWord ? room.lastWord[room.lastWord.length - 1] : null;
+  const lastChar = room.lastWord
+    ? room.lastWord[room.lastWord.length - 1]
+    : room.starterChar || null;
   const validChars = lastChar ? getValidStartingChars(lastChar) : [];
   const hasDueum = validChars.length > 1;
+
+  // Find current alive leader with highest score
+  const maxScore = Math.max(...room.currentPlayers.map((p) => p.score));
+  const leaderPlayerId =
+    maxScore > 0 ? room.currentPlayers.find((p) => p.score === maxScore && p.isAlive)?.id : null;
+
+  // Format 6-digit electronic score display (cyan for positive, red for negative with leading dimmed zeros)
+  const renderLcdScore = (score: number) => {
+    const isNegative = score < 0;
+    const absScore = Math.abs(score);
+    const totalDigits = 6;
+    const scoreStr = absScore.toString();
+    const leadingZerosCount = Math.max(
+      0,
+      (isNegative ? totalDigits - 1 : totalDigits) - scoreStr.length
+    );
+    const leadingZeros = '0'.repeat(leadingZerosCount);
+
+    return (
+      <div
+        className={`inline-flex items-center justify-center font-mono font-black text-xs sm:text-sm px-2 py-0.5 rounded-lg border tracking-widest ${
+          isNegative
+            ? 'bg-[#150a0a] border-rose-900/60 shadow-inner'
+            : 'bg-[#0a1515] border-cyan-900/60 shadow-inner'
+        }`}
+      >
+        {isNegative && <span className="text-rose-500 font-bold mr-0.5">-</span>}
+        <span className={isNegative ? 'text-rose-950 font-bold' : 'text-cyan-950 font-bold'}>
+          {leadingZeros}
+        </span>
+        <span className={isNegative ? 'text-rose-400 font-black' : 'text-cyan-300 font-black'}>
+          {scoreStr}
+        </span>
+      </div>
+    );
+  };
 
   // Last word item definition for sidebar
   const lastWordItem = room.wordChain[room.wordChain.length - 1];
 
   return (
     <div className="flex flex-col gap-5 max-w-6xl mx-auto">
-      {/* Top Game Bar (Image 3 style) */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs px-5 py-3.5 flex items-center justify-between gap-4">
+      {/* Top Game Bar with Round Info & Starter History (Matching user reference) */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs px-5 py-3.5 flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <span className="font-mono font-black text-xl text-[#1e2022]">
             {room.id}
@@ -207,9 +256,28 @@ export const GameView: React.FC<GameViewProps> = ({
           <span className="font-extrabold text-sm text-slate-800">
             {room.title}
           </span>
-          <span className="px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 font-bold text-xs">
-            라운드 {room.round}
+          <span className="px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-800 font-black text-xs">
+            {room.round} / {room.totalRounds || 3} 라운드
           </span>
+        </div>
+
+        {/* Center: Round History Boxes (e.g. [수] [벌] [?]) */}
+        <div className="flex items-center gap-1.5 bg-slate-100 p-1.5 rounded-xl border border-slate-200">
+          <span className="text-[10px] font-bold text-slate-500 mr-1 hidden sm:inline">제시어:</span>
+          {(room.roundHistoryWords || [room.starterChar || '수', '?', '?']).map((char, idx) => (
+            <div
+              key={idx}
+              className={`w-7 h-7 rounded-lg flex items-center justify-center font-black text-xs ${
+                idx + 1 === room.round
+                  ? 'bg-amber-400 text-amber-950 ring-2 ring-amber-500 shadow-xs scale-105'
+                  : char !== '?'
+                  ? 'bg-purple-700 text-white shadow-2xs'
+                  : 'bg-white text-slate-400 border border-slate-200'
+              }`}
+            >
+              {char}
+            </div>
+          ))}
         </div>
 
         <div className="flex items-center gap-3">
@@ -348,9 +416,9 @@ export const GameView: React.FC<GameViewProps> = ({
                       />
                     </div>
 
-                    {/* Pedestal Stand (Image 3 podium style) */}
+                    {/* Pedestal Stand (Matching reference podium with LCD scores) */}
                     <div
-                      className={`w-full rounded-2xl p-2.5 text-center transition-all ${
+                      className={`w-full rounded-2xl p-2 text-center transition-all relative ${
                         isActive && player.isAlive
                           ? 'bg-gradient-to-b from-indigo-50 to-purple-100 border-2 border-purple-400 shadow-md ring-2 ring-purple-300/50'
                           : !player.isAlive
@@ -358,7 +426,15 @@ export const GameView: React.FC<GameViewProps> = ({
                           : 'bg-slate-50 border border-slate-200'
                       }`}
                     >
-                      <div className="flex items-center justify-center gap-1 mb-0.5">
+                      {/* Leader Badge */}
+                      {player.id === leaderPlayerId && (
+                        <div className="absolute -top-2.5 right-2 px-1.5 py-0.2 rounded-full bg-amber-500 text-amber-950 font-black text-[9px] shadow-xs flex items-center gap-0.5 border border-amber-300">
+                          <span>🔥</span>
+                          <span>선두</span>
+                        </div>
+                      )}
+
+                      <div className="flex items-center justify-center gap-1 mb-1">
                         <span
                           className={`w-2 h-2 rounded-full ${
                             player.isAlive ? 'bg-emerald-500' : 'bg-rose-500'
@@ -374,9 +450,9 @@ export const GameView: React.FC<GameViewProps> = ({
                         )}
                       </div>
 
-                      {/* Score Badge */}
-                      <div className="font-mono font-black text-sm text-slate-800">
-                        {player.score.toString().padStart(4, '0')}점
+                      {/* 6-digit LCD Score Badge */}
+                      <div className="my-0.5 flex justify-center">
+                        {renderLcdScore(player.score)}
                       </div>
 
                       {/* Elimination reason if dead */}

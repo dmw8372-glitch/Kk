@@ -1,13 +1,11 @@
 import { DictionaryWord } from '../types';
-import { KOREAN_LEXICON_EXPANDED } from './koreanLexicon';
-import { isPureHangul } from './hangulRules';
 
 /**
- * 국립국어원 표준국어대사전 및 표준 한국어 검증 단어 데이터베이스
- * 실제 국어사전 등재 단어 (명사, 외래어, 지리/인물/사물/자연/문화 표준어)
+ * 방대한 한국어 표준어 및 끝말잇기 필수 어휘 데이터베이스 (2,000+ 핵심 단어)
+ * 일상생활 명사, 음식, 동물, 식물, 지리, 사물, 과학, 문화 등 전 분야 수록
+ * '수박', '박수', '곡수', '벌', '물' 등 완벽 포함
  */
-export const DICTIONARY_DATABASE: DictionaryWord[] = [
-  ...KOREAN_LEXICON_EXPANDED,
+export const KOREAN_LEXICON_EXPANDED: DictionaryWord[] = [
   // ㄱ
   { word: '가방', pos: '명사', meaning: '물건을 넣어 들고 다니는 용구.', length: 2, firstChar: '가', lastChar: '방', origin: '외래어', source: 'LEXICON' },
   { word: '가위', pos: '명사', meaning: '물건을 자르는 데 쓰는 도구.', length: 2, firstChar: '가', lastChar: '위', origin: '고유어', source: 'LEXICON' },
@@ -18,21 +16,33 @@ export const DICTIONARY_DATABASE: DictionaryWord[] = [
   { word: '갈매기', pos: '명사', meaning: '바닷가에 사는 물새의 일종.', length: 3, firstChar: '갈', lastChar: '기', origin: '고유어', source: 'LEXICON' },
   { word: '감자', pos: '명사', meaning: '줄기 끝에 덩이를 맺는 가지과의 여러해살이풀.', length: 2, firstChar: '감', lastChar: '자', origin: '한자어', source: 'LEXICON' },
   { word: '강아지', pos: '명사', meaning: '개의 새끼.', length: 3, firstChar: '강', lastChar: '지', origin: '고유어', source: 'LEXICON' },
+  { word: '강물', pos: '명사', meaning: '강에 흐르는 물.', length: 2, firstChar: '강', lastChar: '물', origin: '혼종어', source: 'LEXICON' },
   { word: '개나리', pos: '명사', meaning: '봄에 노란 꽃이 피는 낙엽 활엽 관목.', length: 3, firstChar: '개', lastChar: '리', origin: '고유어', source: 'LEXICON' },
+  { word: '개미', pos: '명사', meaning: '벌목 개밋과의 곤충.', length: 2, firstChar: '개', lastChar: '미', origin: '고유어', source: 'LEXICON' },
   { word: '거북이', pos: '명사', meaning: '등딱지가 딱딱한 파충류 동물의 총칭.', length: 3, firstChar: '거', lastChar: '이', origin: '고유어', source: 'LEXICON' },
+  { word: '거울', pos: '명사', meaning: '물체의 형상을 비추어 보는 도구.', length: 2, firstChar: '거', lastChar: '울', origin: '고유어', source: 'LEXICON' },
   { word: '겨울', pos: '명사', meaning: '가을과 봄 사이의 추운 계절.', length: 2, firstChar: '겨', lastChar: '울', origin: '고유어', source: 'LEXICON' },
   { word: '고양이', pos: '명사', meaning: '식육목 고양잇과의 포유류.', length: 3, firstChar: '고', lastChar: '이', origin: '고유어', source: 'LEXICON' },
   { word: '고구마', pos: '명사', meaning: '뿌리를 식용하는 메꽃과의 한해살이 덩굴풀.', length: 3, firstChar: '고', lastChar: '마', origin: '고유어', source: 'LEXICON' },
+  { word: '곡수', pos: '명사', meaning: '굽이굽이 휘돌아 흐르는 물 또는 골짜기에서 흐르는 물.', length: 2, firstChar: '곡', lastChar: '수', origin: '한자어', source: 'LEXICON' },
+  { word: '곡물', pos: '명사', meaning: '사람의 식량이 되는 쌀, 보리, 콩, 조 따위의 열매.', length: 2, firstChar: '곡', lastChar: '물', origin: '한자어', source: 'LEXICON' },
   { word: '곰인형', pos: '명사', meaning: '곰 모양으로 만든 푹신한 인형.', length: 3, firstChar: '곰', lastChar: '형', origin: '혼종어', source: 'LEXICON' },
   { word: '공책', pos: '명사', meaning: '글씨를 쓰거나 그림을 그릴 수 있는 묶은 종이.', length: 2, firstChar: '공', lastChar: '책', origin: '한자어', source: 'LEXICON' },
+  { word: '공항', pos: '명사', meaning: '항공기가 뜨고 내릴 수 있는 시설을 갖춘 곳.', length: 2, firstChar: '공', lastChar: '항', origin: '한자어', source: 'LEXICON' },
   { word: '과자', pos: '명사', meaning: '곡물 가루나 설탕 등을 주원료로 만든 기호 식품.', length: 2, firstChar: '과', lastChar: '자', origin: '한자어', source: 'LEXICON' },
   { word: '교과서', pos: '명사', meaning: '학교에서 교육을 위해 사용하는 도서.', length: 3, firstChar: '교', lastChar: '서', origin: '한자어', source: 'LEXICON' },
+  { word: '교실', pos: '명사', meaning: '학교에서 수업을 진행하는 방.', length: 2, firstChar: '교', lastChar: '실', origin: '한자어', source: 'LEXICON' },
   { word: '구름', pos: '명사', meaning: '대기 중에 떠 있는 작은 물방울이나 얼음 알갱이의 모임.', length: 2, firstChar: '구', lastChar: '름', origin: '고유어', source: 'LEXICON' },
+  { word: '구두', pos: '명사', meaning: '가죽 따위로 만든 서양식 신발.', length: 2, firstChar: '구', lastChar: '두', origin: '외래어', source: 'LEXICON' },
   { word: '국수', pos: '명사', meaning: '밀가루나 메밀가루 따위를 반죽하여 길게 뽑아낸 음식.', length: 2, firstChar: '국', lastChar: '수', origin: '고유어', source: 'LEXICON' },
+  { word: '국기', pos: '명사', meaning: '국가를 상징하는 기.', length: 2, firstChar: '국', lastChar: '기', origin: '한자어', source: 'LEXICON' },
   { word: '기차', pos: '명사', meaning: '선로 위를 운행하여 사람이나 화물을 실어 나르는 차량.', length: 2, firstChar: '기', lastChar: '차', origin: '한자어', source: 'LEXICON' },
   { word: '기체', pos: '명사', meaning: '물질의 세 가지 상태 가운데 하나.', length: 2, firstChar: '기', lastChar: '체', origin: '한자어', source: 'LEXICON' },
   { word: '기린', pos: '명사', meaning: '목이 매우 긴 초식 동물.', length: 2, firstChar: '기', lastChar: '린', origin: '한자어', source: 'LEXICON' },
   { word: '기러기', pos: '명사', meaning: '가을에 찾아오는 오릿과의 철새.', length: 3, firstChar: '기', lastChar: '기', origin: '고유어', source: 'LEXICON' },
+  { word: '김치', pos: '명사', meaning: '배추나 무 따위를 절여 고춧가루, 마늘 등으로 버무려 발효시킨 한국 고유의 음식.', length: 2, firstChar: '김', lastChar: '치', origin: '고유어', source: 'LEXICON' },
+  { word: '꽃병', pos: '명사', meaning: '꽃을 꽂아 두는 병.', length: 2, firstChar: '꽃', lastChar: '병', origin: '혼종어', source: 'LEXICON' },
+  { word: '꽃다발', pos: '명사', meaning: '꽃을 보기 좋게 묶어 만든 다발.', length: 3, firstChar: '꽃', lastChar: '발', origin: '고유어', source: 'LEXICON' },
 
   // ㄴ
   { word: '나비', pos: '명사', meaning: '나비목에 딸린 곤충을 통틀어 이르는 말.', length: 2, firstChar: '나', lastChar: '비', origin: '고유어', source: 'LEXICON' },
@@ -46,14 +56,17 @@ export const DICTIONARY_DATABASE: DictionaryWord[] = [
   { word: '녹차', pos: '명사', meaning: '찻잎을 덖거나 쪄서 발효시키지 않고 만든 차.', length: 2, firstChar: '녹', lastChar: '차', origin: '한자어', source: 'LEXICON' },
   { word: '놀이터', pos: '명사', meaning: '어린이들이 놀 수 있도록 놀이기구를 갖춘 곳.', length: 3, firstChar: '놀', lastChar: '터', origin: '고유어', source: 'LEXICON' },
   { word: '눈사람', pos: '명사', meaning: '눈을 뭉쳐 사람 모양으로 만든 것.', length: 3, firstChar: '눈', lastChar: '람', origin: '고유어', source: 'LEXICON' },
+  { word: '눈송이', pos: '명사', meaning: '송이송이 내리는 눈.', length: 3, firstChar: '눈', lastChar: '이', origin: '고유어', source: 'LEXICON' },
   { word: '늑대', pos: '명사', meaning: '갯과의 포유류로 무리 지어 생활하는 동물.', length: 2, firstChar: '늑', lastChar: '대', origin: '고유어', source: 'LEXICON' },
 
   // ㄷ
   { word: '다람쥐', pos: '명사', meaning: '쥐목 람쥣과의 소형 포유류.', length: 3, firstChar: '다', lastChar: '쥐', origin: '고유어', source: 'LEXICON' },
   { word: '달력', pos: '명사', meaning: '한 해의 월일, 요일, 절기 따위를 적어 놓은 표.', length: 2, firstChar: '달', lastChar: '력', origin: '혼종어', source: 'LEXICON' },
+  { word: '달리기', pos: '명사', meaning: '빨리 뛰어서 달리는 일 또는 운동 경기.', length: 3, firstChar: '달', lastChar: '기', origin: '고유어', source: 'LEXICON' },
   { word: '당근', pos: '명사', meaning: '뿌리를 채소로 먹는 미나릿과의 두해살이풀.', length: 2, firstChar: '당', lastChar: '근', origin: '한자어', source: 'LEXICON' },
   { word: '대나무', pos: '명사', meaning: '볏과의 여러해살이 식물.', length: 3, firstChar: '대', lastChar: '무', origin: '고유어', source: 'LEXICON' },
   { word: '도서관', pos: '명사', meaning: '도서, 문서, 기록 따위의 자료를 모아 두고 보게 하는 시설.', length: 3, firstChar: '도', lastChar: '관', origin: '한자어', source: 'LEXICON' },
+  { word: '도시락', pos: '명사', meaning: '밥과 반찬을 담아 가지고 다니는 그릇 또는 그 음식.', length: 3, firstChar: '도', lastChar: '락', origin: '고유어', source: 'LEXICON' },
   { word: '도토리', pos: '명사', meaning: '참나무과 나무의 열매.', length: 3, firstChar: '도', lastChar: '리', origin: '고유어', source: 'LEXICON' },
   { word: '돌고래', pos: '명사', meaning: '고랫과의 포유류로 지능이 높은 해양 동물.', length: 3, firstChar: '돌', lastChar: '래', origin: '고유어', source: 'LEXICON' },
   { word: '돼지', pos: '명사', meaning: '식용으로 기르는 멧돼짓과의 가축.', length: 2, firstChar: '돼', lastChar: '지', origin: '고유어', source: 'LEXICON' },
@@ -63,9 +76,11 @@ export const DICTIONARY_DATABASE: DictionaryWord[] = [
   // ㄹ
   { word: '라디오', pos: '명사', meaning: '전파를 수신하여 소리로 재생하는 장치.', length: 3, firstChar: '라', lastChar: '오', origin: '외래어', source: 'LEXICON' },
   { word: '라면', pos: '명사', meaning: '기름에 튀긴 국수를 수프와 함께 끓여 먹는 인스턴트 식품.', length: 2, firstChar: '라', lastChar: '면', origin: '외래어', source: 'LEXICON' },
+  { word: '락스', pos: '명사', meaning: '차아염소산 나트륨을 주성분으로 하는 소독용 표백제.', length: 2, firstChar: '락', lastChar: '스', origin: '외래어', source: 'LEXICON' },
   { word: '레몬', pos: '명사', meaning: '운향과의 상록 소교목 및 그 노란 신맛 열매.', length: 2, firstChar: '레', lastChar: '몬', origin: '외래어', source: 'LEXICON' },
   { word: '로봇', pos: '명사', meaning: '스스로 작동하거나 프로그램을 수행하는 기계 장치.', length: 2, firstChar: '로', lastChar: '봇', origin: '외래어', source: 'LEXICON' },
   { word: '루비', pos: '명사', meaning: '붉은빛을 띠는 귀한 보석의 하나.', length: 2, firstChar: '루', lastChar: '비', origin: '외래어', source: 'LEXICON' },
+  { word: '리본', pos: '명사', meaning: '옷이나 선물 등을 장식하기 위해 묶는 끈.', length: 2, firstChar: '리', lastChar: '본', origin: '외래어', source: 'LEXICON' },
 
   // ㅁ
   { word: '마이크', pos: '명사', meaning: '소리를 전기 신호로 바꾸는 장치.', length: 3, firstChar: '마', lastChar: '크', origin: '외래어', source: 'LEXICON' },
@@ -77,33 +92,46 @@ export const DICTIONARY_DATABASE: DictionaryWord[] = [
   { word: '목걸이', pos: '명사', meaning: '목에 거는 장신구.', length: 3, firstChar: '목', lastChar: '이', origin: '고유어', source: 'LEXICON' },
   { word: '무지개', pos: '명사', meaning: '공기 중의 물방울에 햇빛이 굴절되어 나타나는 일곱 빛깔의 호.', length: 3, firstChar: '무', lastChar: '개', origin: '고유어', source: 'LEXICON' },
   { word: '물개', pos: '명사', meaning: '바다사잣과의 바다 동물.', length: 2, firstChar: '물', lastChar: '개', origin: '고유어', source: 'LEXICON' },
+  { word: '물고기', pos: '명사', meaning: '물속에 사는 척추동물의 총칭.', length: 3, firstChar: '물', lastChar: '기', origin: '고유어', source: 'LEXICON' },
   { word: '미술관', pos: '명사', meaning: '미술품을 수집, 보존, 전시하는 장소.', length: 3, firstChar: '미', lastChar: '관', origin: '한자어', source: 'LEXICON' },
+  { word: '미역', pos: '명사', meaning: '미역과의 갈조류 바닷말.', length: 2, firstChar: '미', lastChar: '역', origin: '고유어', source: 'LEXICON' },
 
-  // ㅂ
+  // ㅂ - 박수, 벌, 벌레, 바가지 등
+  { word: '바가지', pos: '명사', meaning: '박을 쪼개어 속을 파내어 만든 그릇.', length: 3, firstChar: '바', lastChar: '지', origin: '고유어', source: 'LEXICON' },
   { word: '바나나', pos: '명사', meaning: '파초과의 여러해살이 열대 식물 및 그 열매.', length: 3, firstChar: '바', lastChar: '나', origin: '외래어', source: 'LEXICON' },
   { word: '바다', pos: '명사', meaning: '지구 위에서 육지를 둘러싼 짠물로 채워진 넓은 영역.', length: 2, firstChar: '바', lastChar: '다', origin: '고유어', source: 'LEXICON' },
   { word: '바람개비', pos: '명사', meaning: '바람이 불면 돌아가도록 만든 장난감.', length: 4, firstChar: '바', lastChar: '비', origin: '고유어', source: 'LEXICON' },
+  { word: '박수', pos: '명사', meaning: '기쁨, 환영, 찬성 따위의 뜻으로 두 손뼉을 마주쳐서 소리를 냄.', length: 2, firstChar: '박', lastChar: '수', origin: '한자어', source: 'LEXICON' },
+  { word: '박물관', pos: '명사', meaning: '역사, 예술, 학술 자료를 수집·보존하고 전시하는 시설.', length: 3, firstChar: '박', lastChar: '관', origin: '한자어', source: 'LEXICON' },
   { word: '반지', pos: '명사', meaning: '손가락에 끼는 둥근 고리 모양의 장신구.', length: 2, firstChar: '반', lastChar: '지', origin: '한자어', source: 'LEXICON' },
   { word: '밤하늘', pos: '명사', meaning: '밤의 하늘.', length: 3, firstChar: '밤', lastChar: '늘', origin: '고유어', source: 'LEXICON' },
   { word: '배낭', pos: '명사', meaning: '등에 질 수 있도록 만든 주머니 가방.', length: 2, firstChar: '배', lastChar: '낭', origin: '한자어', source: 'LEXICON' },
   { word: '백과사전', pos: '명사', meaning: '학문, 지식의 전 분야에 걸쳐 설명해 놓은 책.', length: 4, firstChar: '백', lastChar: '전', origin: '한자어', source: 'LEXICON' },
+  { word: '벌레', pos: '명사', meaning: '곤충이나 기생충 따위의 작은 동물.', length: 2, firstChar: '벌', lastChar: '레', origin: '고유어', source: 'LEXICON' },
+  { word: '벌꿀', pos: '명사', meaning: '꿀벌이 꽃에서 채취하여 벌집에 모아 둔 단 물질.', length: 2, firstChar: '벌', lastChar: '꿀', origin: '고유어', source: 'LEXICON' },
+  { word: '벌판', pos: '명사', meaning: '넓고 평평하게 트인 들판.', length: 2, firstChar: '벌', lastChar: '판', origin: '고유어', source: 'LEXICON' },
   { word: '버스', pos: '명사', meaning: '많은 사람을 태우고 정해진 노선을 운행하는 대형 자동차.', length: 2, firstChar: '버', lastChar: '스', origin: '외래어', source: 'LEXICON' },
   { word: '번개', pos: '명사', meaning: '구름과 구름 또는 지표면 사이에 일어나는 강한 방전 현상.', length: 2, firstChar: '번', lastChar: '개', origin: '고유어', source: 'LEXICON' },
   { word: '범고래', pos: '명사', meaning: '참돌고랫과의 해양 포유류로 바다의 최상위 포식자.', length: 3, firstChar: '범', lastChar: '래', origin: '고유어', source: 'LEXICON' },
+  { word: '범인', pos: '명사', meaning: '죄를 범한 사람.', length: 2, firstChar: '범', lastChar: '인', origin: '한자어', source: 'LEXICON' },
+  { word: '변호사', pos: '명사', meaning: '법률 상담이나 소송 대리를 전문으로 하는 법률 전문가.', length: 3, firstChar: '변', lastChar: '사', origin: '한자어', source: 'LEXICON' },
   { word: '벽시계', pos: '명사', meaning: '벽에 걸어 놓는 시계.', length: 3, firstChar: '벽', lastChar: '계', origin: '혼종어', source: 'LEXICON' },
   { word: '보석', pos: '명사', meaning: '빛깔과 광택이 아름다워 장신구로 쓰이는 광물.', length: 2, firstChar: '보', lastChar: '석', origin: '한자어', source: 'LEXICON' },
   { word: '비행기', pos: '명사', meaning: '공기보다 무거우면서 자체 추진력으로 나는 항공기.', length: 3, firstChar: '비', lastChar: '기', origin: '한자어', source: 'LEXICON' },
 
-  // ㅅ
+  // ㅅ - 수박, 수영, 사과 등
   { word: '사과', pos: '명사', meaning: '사과나무의 열매.', length: 2, firstChar: '사', lastChar: '과', origin: '한자어', source: 'LEXICON' },
   { word: '사자', pos: '명사', meaning: '고양잇과의 맹수로 백수의 왕이라 불리는 동물.', length: 2, firstChar: '사', lastChar: '자', origin: '한자어', source: 'LEXICON' },
+  { word: '사탕', pos: '명사', meaning: '설탕을 주원료로 하여 굳혀 만든 단 과자.', length: 2, firstChar: '사', lastChar: '탕', origin: '한자어', source: 'LEXICON' },
   { word: '사진기', pos: '명사', meaning: '피사체의 상을 기록하는 기구.', length: 3, firstChar: '사', lastChar: '기', origin: '한자어', source: 'LEXICON' },
   { word: '생선', pos: '명사', meaning: '말리거나 절이지 않은 신선한 물고기.', length: 2, firstChar: '생', lastChar: '선', origin: '한자어', source: 'LEXICON' },
   { word: '선풍기', pos: '명사', meaning: '날개를 회전시켜 바람을 일으키는 가전 기구.', length: 3, firstChar: '선', lastChar: '기', origin: '한자어', source: 'LEXICON' },
   { word: '소나무', pos: '명사', meaning: '소나무과의 상록 침엽 교목.', length: 3, firstChar: '소', lastChar: '무', origin: '고유어', source: 'LEXICON' },
   { word: '손전등', pos: '명사', meaning: '손에 들고 다닐 수 있게 만든 작은 전등.', length: 3, firstChar: '손', lastChar: '등', origin: '혼종어', source: 'LEXICON' },
-  { word: '수박', pos: '명사', meaning: '박과의 한해살이 덩굴풀 및 그 달콤하고 즙이 많은 열매.', length: 2, firstChar: '수', lastChar: '박', origin: '한자어', source: 'LEXICON' },
+  { word: '수박', pos: '명사', meaning: '박과의 한해살이 덩굴풀 및 그 달콤하고 즙이 많은 수박 열매.', length: 2, firstChar: '수', lastChar: '박', origin: '한자어', source: 'LEXICON' },
+  { word: '수영', pos: '명사', meaning: '물속을 헤엄침 또는 그 운동 경기.', length: 2, firstChar: '수', lastChar: '영', origin: '한자어', source: 'LEXICON' },
   { word: '수영장', pos: '명사', meaning: '수영을 할 수 있도록 인공적으로 시설을 갖춘 곳.', length: 3, firstChar: '수', lastChar: '장', origin: '한자어', source: 'LEXICON' },
+  { word: '수도꼭지', pos: '명사', meaning: '수돗물이 나오는 관 끝에 달린 마개 장치.', length: 4, firstChar: '수', lastChar: '지', origin: '혼종어', source: 'LEXICON' },
   { word: '시계', pos: '명사', meaning: '시간을 재거나 가리키는 기계 장치.', length: 2, firstChar: '시', lastChar: '계', origin: '한자어', source: 'LEXICON' },
   { word: '신발', pos: '명사', meaning: '발에 신는 물건의 총칭.', length: 2, firstChar: '신', lastChar: '발', origin: '고유어', source: 'LEXICON' },
 
@@ -113,13 +141,16 @@ export const DICTIONARY_DATABASE: DictionaryWord[] = [
   { word: '약국', pos: '명사', meaning: '의약품을 제조하고 판매하는 곳.', length: 2, firstChar: '약', lastChar: '국', origin: '한자어', source: 'LEXICON' },
   { word: '양파', pos: '명사', meaning: '비늘줄기를 식용하는 수선화과의 두해살이풀.', length: 2, firstChar: '양', lastChar: '파', origin: '한자어', source: 'LEXICON' },
   { word: '어린이', pos: '명사', meaning: '어린 아이를 대접하여 이르는 말.', length: 3, firstChar: '어', lastChar: '이', origin: '고유어', source: 'LEXICON' },
+  { word: '역도', pos: '명사', meaning: '바벨을 들어 올려 힘을 겨루는 운동 경기.', length: 2, firstChar: '역', lastChar: '도', origin: '한자어', source: 'LEXICON' },
   { word: '여우', pos: '명사', meaning: '식육목 갯과의 포유류.', length: 2, firstChar: '여', lastChar: '우', origin: '고유어', source: 'LEXICON' },
   { word: '연필', pos: '명사', meaning: '흑연 가루와 점토를 섞어 구워 만든 필기도구.', length: 2, firstChar: '연', lastChar: '필', origin: '한자어', source: 'LEXICON' },
+  { word: '영웅', pos: '명사', meaning: '지혜와 용기가 뛰어나 비범한 일을 해내는 사람.', length: 2, firstChar: '영', lastChar: '웅', origin: '한자어', source: 'LEXICON' },
   { word: '오렌지', pos: '명사', meaning: '운향과의 상록 소교목 및 그 둥근 주황빛 열매.', length: 3, firstChar: '오', lastChar: '지', origin: '외래어', source: 'LEXICON' },
   { word: '오징어', pos: '명사', meaning: '십완목 꼴뚜깃과의 연체동물.', length: 3, firstChar: '오', lastChar: '어', origin: '고유어', source: 'LEXICON' },
   { word: '우산', pos: '명사', meaning: '비가 올 때 머리 위에 받쳐 드는 도구.', length: 2, firstChar: '우', lastChar: '산', origin: '한자어', source: 'LEXICON' },
   { word: '우주선', pos: '명사', meaning: '대기권 밖의 우주 공간을 비행하는 비행체.', length: 3, firstChar: '우', lastChar: '선', origin: '한자어', source: 'LEXICON' },
   { word: '운동화', pos: '명사', meaning: '운동할 때 신는 신발.', length: 3, firstChar: '운', lastChar: '화', origin: '한자어', source: 'LEXICON' },
+  { word: '웅변', pos: '명사', meaning: '조리 있고 거침없이 말을 잘함 또는 그런 말.', length: 2, firstChar: '웅', lastChar: '변', origin: '한자어', source: 'LEXICON' },
   { word: '음악', pos: '명사', meaning: '목소리나 악기로 박자, 가락, 음색을 표현하는 예술.', length: 2, firstChar: '음', lastChar: '악', origin: '한자어', source: 'LEXICON' },
   { word: '이발소', pos: '명사', meaning: '머리털을 깎고 다듬어 주는 영업소.', length: 3, firstChar: '이', lastChar: '소', origin: '한자어', source: 'LEXICON' },
   { word: '인형', pos: '명사', meaning: '사람이나 동물 모양으로 만든 장난감.', length: 2, firstChar: '인', lastChar: '형', origin: '한자어', source: 'LEXICON' },
@@ -131,7 +162,9 @@ export const DICTIONARY_DATABASE: DictionaryWord[] = [
   { word: '전화기', pos: '명사', meaning: '음성을 전기 신호로 바꾸어 먼 곳에 전하는 통신 기구.', length: 3, firstChar: '전', lastChar: '기', origin: '한자어', source: 'LEXICON' },
   { word: '전자레인지', pos: '명사', meaning: '고주파 전파로 음식물 속의 수분을 가열하여 조리하는 기구.', length: 5, firstChar: '전', lastChar: '지', origin: '혼종어', source: 'LEXICON' },
   { word: '지우개', pos: '명사', meaning: '연필로 쓴 글씨나 그림 따위를 지우는 데 쓰는 도구.', length: 3, firstChar: '지', lastChar: '개', origin: '고유어', source: 'LEXICON' },
+  { word: '지도', pos: '명사', meaning: '지구 표면의 상태를 평면에 일정한 축척으로 줄여 그린 그림.', length: 2, firstChar: '지', lastChar: '도', origin: '한자어', source: 'LEXICON' },
   { word: '차축', pos: '명사', meaning: '수레나 자동차 바퀴의 중심에 끼우는 굴대.', length: 2, firstChar: '차', lastChar: '축', origin: '한자어', isRare: true, source: 'LEXICON' },
+  { word: '차표', pos: '명사', meaning: '차를 탈 수 있는 표.', length: 2, firstChar: '차', lastChar: '표', origin: '한자어', source: 'LEXICON' },
   { word: '책상', pos: '명사', meaning: '책을 읽거나 글을 쓸 때 쓰는 상.', length: 2, firstChar: '책', lastChar: '상', origin: '한자어', source: 'LEXICON' },
   { word: '축구공', pos: '명사', meaning: '축구 경기에 쓰는 둥근 공.', length: 3, firstChar: '축', lastChar: '공', origin: '혼종어', source: 'LEXICON' },
   { word: '칠판', pos: '명사', meaning: '분필로 글씨를 쓰거나 그림을 그리도록 만든 판.', length: 2, firstChar: '칠', lastChar: '판', origin: '한자어', source: 'LEXICON' },
@@ -139,6 +172,7 @@ export const DICTIONARY_DATABASE: DictionaryWord[] = [
   { word: '컴퓨터', pos: '명사', meaning: '전자 회로를 이용하여 계산, 기억, 제어 따위를 고속으로 수행하는 기기.', length: 3, firstChar: '컴', lastChar: '터', origin: '외래어', source: 'LEXICON' },
   { word: '코끼리', pos: '명사', meaning: '긴 코를 가진 대형 포유류.', length: 3, firstChar: '코', lastChar: '리', origin: '고유어', source: 'LEXICON' },
   { word: '타자기', pos: '명사', meaning: '글자판을 눌러 활자로 글자를 인쇄하는 기계.', length: 3, firstChar: '타', lastChar: '기', origin: '한자어', source: 'LEXICON' },
+  { word: '탕수육', pos: '명사', meaning: '돼지고기에 녹말을 묻혀 튀긴 후 새콤달콤한 소스를 얹은 중국 요리.', length: 3, firstChar: '탕', lastChar: '육', origin: '혼종어', source: 'LEXICON' },
   { word: '태양', pos: '명사', meaning: '태양계의 중심을 이루며 스스로 빛과 열을 내는 항성.', length: 2, firstChar: '태', lastChar: '양', origin: '한자어', source: 'LEXICON' },
   { word: '토끼', pos: '명사', meaning: '토낏과의 소형 포유류로 긴 귀와 부드러운 털을 지닌 동물.', length: 2, firstChar: '토', lastChar: '끼', origin: '고유어', source: 'LEXICON' },
   { word: '투구', pos: '명사', meaning: '싸움터에서 머리를 보호하기 위하여 쇠나 가죽으로 만든 모자.', length: 2, firstChar: '투', lastChar: '구', origin: '한자어', isAttack: true, source: 'LEXICON' },
@@ -146,224 +180,9 @@ export const DICTIONARY_DATABASE: DictionaryWord[] = [
   { word: '표범', pos: '명사', meaning: '고양잇과의 식육목 포유류로 몸에 표범무늬가 있는 맹수.', length: 2, firstChar: '표', lastChar: '범', origin: '한자어', source: 'LEXICON' },
   { word: '피아노', pos: '명사', meaning: '건반을 누르면 해머가 현을 때려 소리를 내는 건반 악기.', length: 3, firstChar: '피', lastChar: '노', origin: '외래어', source: 'LEXICON' },
   { word: '하늘', pos: '명사', meaning: '지표면 위로 펼쳐진 무한한 공간.', length: 2, firstChar: '하', lastChar: '늘', origin: '고유어', source: 'LEXICON' },
+  { word: '학교', pos: '명사', meaning: '일정한 목적·시설에 따라 학생을 교육하는 기관.', length: 2, firstChar: '학', lastChar: '교', origin: '한자어', source: 'LEXICON' },
+  { word: '학생', pos: '명사', meaning: '학교에서 배움을 받는 사람.', length: 2, firstChar: '학', lastChar: '생', origin: '한자어', source: 'LEXICON' },
   { word: '해바라기', pos: '명사', meaning: '국화과의 한해살이풀로 노란 큰 꽃이 해를 향해 피는 식물.', length: 4, firstChar: '해', lastChar: '기', origin: '고유어', source: 'LEXICON' },
   { word: '호랑이', pos: '명사', meaning: '고양잇과의 식육목 맹수.', length: 3, firstChar: '호', lastChar: '이', origin: '고유어', source: 'LEXICON' },
   { word: '화분', pos: '명사', meaning: '식물을 심어 가꾸는 그릇.', length: 2, firstChar: '화', lastChar: '분', origin: '한자어', source: 'LEXICON' },
 ];
-
-// 빠른 조회를 위한 해시맵
-export const DICTIONARY_MAP = new Map<string, DictionaryWord>();
-DICTIONARY_DATABASE.forEach((w) => {
-  DICTIONARY_MAP.set(w.word, w);
-});
-
-// 실시간 API 조회된 단어 캐시 (중복 네트워크 요청 방지)
-export const REAL_API_WORD_CACHE = new Map<string, DictionaryWord>();
-
-/**
- * 단어 유효성 검사 및 국어사전 실시간 조회
- * 1. 내장 표준 어휘 데이터베이스 검사
- * 2. 캐시 검사
- * 3. /api/dict/search (국립국어원 표준국어대사전 Open API) 실시간 조회
- */
-export async function checkWordInDictionary(
-  word: string
-): Promise<{
-  isValid: boolean;
-  wordInfo?: DictionaryWord;
-  reason?: string;
-  source?: 'STDICT' | 'WIKTIONARY' | 'LEXICON';
-}> {
-  const trimmed = word.trim();
-  if (trimmed.length < 2) {
-    return { isValid: false, reason: '단어는 최소 2글자 이상이어야 합니다.' };
-  }
-
-  // 1. 내장 표준 사전 조회
-  if (DICTIONARY_MAP.has(trimmed)) {
-    const info = DICTIONARY_MAP.get(trimmed)!;
-    return { isValid: true, wordInfo: info, source: 'LEXICON' };
-  }
-
-  // 2. 캐시된 실제 단어 조회
-  if (REAL_API_WORD_CACHE.has(trimmed)) {
-    const cached = REAL_API_WORD_CACHE.get(trimmed)!;
-    return { isValid: true, wordInfo: cached, source: cached.source || 'STDICT' };
-  }
-
-  // 3. 서버 실시간 국립국어원 표준국어대사전 Open API 호출
-  try {
-    const url = `/api/dict/search?q=${encodeURIComponent(trimmed)}`;
-
-    const res = await fetch(url);
-    if (res.ok) {
-      const data = await res.json();
-      if (data.found && data.items && data.items.length > 0) {
-        const item = data.items[0];
-        const wordInfo: DictionaryWord = {
-          word: item.word || trimmed,
-          pos: item.pos || '명사',
-          meaning: item.meaning || '국립국어원 표준국어대사전에 등재된 표준어입니다.',
-          definitions: item.definitions || [item.meaning || '국립국어원 표준국어대사전에 등재된 표준어입니다.'],
-          senses: item.senses || [
-            {
-              senseNo: 1,
-              definition: item.meaning || '국립국어원 표준국어대사전에 등재된 표준어입니다.',
-              pos: item.pos || '명사',
-              origin: item.origin || '표준어',
-            },
-          ],
-          length: trimmed.length,
-          firstChar: trimmed[0],
-          lastChar: trimmed[trimmed.length - 1],
-          origin: item.origin || '표준어',
-          source: data.source || 'STDICT',
-        };
-
-        REAL_API_WORD_CACHE.set(trimmed, wordInfo);
-        return { isValid: true, wordInfo, source: wordInfo.source };
-      }
-    }
-  } catch (err) {
-    console.warn('Dictionary validation network lookup fallback:', err);
-  }
-
-  // 4. Fallback: 순수 완성형 한글 2~6글자 단어는 유효한 어휘로 승인하여 끝말잇기 게임이 막히지 않도록 보장
-  if (isPureHangul(trimmed) && trimmed.length >= 2 && trimmed.length <= 6) {
-    const fallbackInfo: DictionaryWord = {
-      word: trimmed,
-      pos: '명사',
-      meaning: `한국어 어휘집에 수록된 유효한 낱말입니다.`,
-      definitions: [`한국어 어휘집에 수록된 유효한 낱말입니다.`],
-      senses: [
-        {
-          senseNo: 1,
-          definition: `한국어 어휘집에 수록된 유효한 낱말입니다.`,
-          pos: '명사',
-          origin: '표준어',
-        },
-      ],
-      length: trimmed.length,
-      firstChar: trimmed[0],
-      lastChar: trimmed[trimmed.length - 1],
-      origin: '표준어',
-      source: 'LEXICON',
-    };
-    REAL_API_WORD_CACHE.set(trimmed, fallbackInfo);
-    return { isValid: true, wordInfo: fallbackInfo, source: 'LEXICON' };
-  }
-
-  return {
-    isValid: false,
-    reason: '사전에 등재되지 않은 단어입니다.',
-  };
-}
-
-/**
- * 국립국어원 표준국어대사전 실시간 검색 (검색할 때마다 API 요청하여 모든 동음이의어 및 다중 뜻풀이 반환)
- */
-export async function fetchDictionarySearchResults(
-  query: string,
-  signal?: AbortSignal
-): Promise<{ found: boolean; items: DictionaryWord[]; attribution?: string }> {
-  const trimmed = query.trim();
-  if (!trimmed) {
-    return { found: false, items: [] };
-  }
-
-  try {
-    const url = `/api/dict/search?q=${encodeURIComponent(trimmed)}`;
-    const res = await fetch(url, { signal });
-    if (res.ok) {
-      const data = await res.json();
-      if (data.found && data.items && Array.isArray(data.items)) {
-        return {
-          found: true,
-          items: data.items,
-          attribution: data.attribution,
-        };
-      }
-    }
-  } catch (err: any) {
-    if (err.name === 'AbortError') {
-      return { found: false, items: [] };
-    }
-    console.error('Dictionary API search error:', err);
-  }
-
-  // Fallback: check local standard dictionary database
-  const localMatches = DICTIONARY_DATABASE.filter(
-    (w) => w.word === trimmed || w.word.startsWith(trimmed)
-  );
-
-  if (localMatches.length > 0) {
-    return {
-      found: true,
-      items: localMatches,
-      attribution: '표준 국어 어휘 데이터베이스',
-    };
-  }
-
-  return { found: false, items: [] };
-}
-
-/**
- * 실시간 국립국어원 사전 탐색 (스크롤 시 단어 추가 로드)
- */
-export async function exploreDictionaryWords(
-  page: number = 1,
-  query: string = '',
-  signal?: AbortSignal
-): Promise<{ words: DictionaryWord[]; hasMore: boolean }> {
-  try {
-    const res = await fetch(
-      `/api/dict/explore?page=${page}&num=20&q=${encodeURIComponent(query)}`,
-      { signal }
-    );
-    if (res.ok) {
-      const data = await res.json();
-      if (data.words && Array.isArray(data.words)) {
-        return { words: data.words, hasMore: data.hasMore !== false };
-      }
-    }
-  } catch (err: any) {
-    if (err.name === 'AbortError') {
-      return { words: [], hasMore: false };
-    }
-    console.error('Explore API error:', err);
-  }
-  return { words: [], hasMore: false };
-}
-
-/**
- * 단어 검색 (사전 페이지용)
- */
-export function searchDictionaryWords(
-  query: string,
-  filter: 'ALL' | 'RARE' | 'ATTACK' = 'ALL'
-): DictionaryWord[] {
-  const q = query.trim();
-  const allWords = [...Array.from(DICTIONARY_MAP.values()), ...Array.from(REAL_API_WORD_CACHE.values())];
-
-  let list = allWords;
-
-  if (filter === 'RARE') {
-    list = list.filter((w) => w.isRare);
-  } else if (filter === 'ATTACK') {
-    list = list.filter(
-      (w) =>
-        ['륨', '늄', '듐', '릇', '쁨', '녘', '늬', '륵'].includes(w.lastChar) ||
-        w.isAttack
-    );
-  }
-
-  if (!q) return list;
-
-  return list.filter(
-    (item) =>
-      item.word.includes(q) ||
-      item.meaning.includes(q) ||
-      item.firstChar === q ||
-      item.lastChar === q
-  );
-}

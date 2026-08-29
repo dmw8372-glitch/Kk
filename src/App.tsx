@@ -677,7 +677,12 @@ export function App() {
   };
 
   // Create Room
-  const handleCreateRoom = async (title?: string, maxPlayers: number = 8, isPublic: boolean = true) => {
+  const handleCreateRoom = async (
+    title?: string,
+    maxPlayers: number = 8,
+    isPublic: boolean = true,
+    totalRounds: number = 3
+  ) => {
     const newRoomId = Math.random().toString(36).substring(2, 8).toUpperCase();
 
     const hostPlayer: Player = {
@@ -700,6 +705,8 @@ export function App() {
       status: 'WAITING',
       currentPlayers: [hostPlayer],
       maxPlayers,
+      totalRounds: totalRounds || 3,
+      roundTime: 90,
       isPublic,
       turnDuration: 15.0,
       round: 1,
@@ -936,11 +943,38 @@ export function App() {
     }
   };
 
-  // Start Game (Host only) - Section 1: 2~8명이 한 방에서 랜덤 순서로 시작
+  // Candidate starting characters for automatic random prompt
+  const STARTER_SYLLABLES = [
+    '수', '박', '벌', '곡', '바', '사', '가', '꽃', '물', '하', '봄', '별', '달',
+    '차', '구', '도', '기', '마', '산', '해', '눈', '밤', '비', '초', '태', '풍',
+    '황', '화', '백', '홍', '청', '녹', '신', '선', '인', '원', '국', '대', '소',
+    '문', '무', '천', '지', '일', '월', '목', '금', '토'
+  ];
+
+  const getRandomStarter = (): string => {
+    return STARTER_SYLLABLES[Math.floor(Math.random() * STARTER_SYLLABLES.length)];
+  };
+
+  const handleChangeTotalRounds = (rounds: number) => {
+    if (!activeRoom) return;
+    const updatedRoom: GameRoom = {
+      ...activeRoom,
+      totalRounds: rounds,
+    };
+    setActiveRoom(updatedRoom);
+    saveRoomToServer(updatedRoom);
+    broadcastRoomEvent('SYNC_ROOM', { room: updatedRoom });
+  };
+
+  // Start Game (Host only) - Multi-round + Random starter syllable
   const handleStartGame = () => {
     if (!activeRoom || activeRoom.currentPlayers.length < 2) return;
 
-    // Shuffle players randomly
+    const totalRounds = activeRoom.totalRounds || 3;
+    const initialStarter = getRandomStarter();
+    const historyStarters = [initialStarter, ...Array(totalRounds - 1).fill('?')];
+
+    // Shuffle players randomly with clean 0 initial score
     const shuffled = [...activeRoom.currentPlayers]
       .sort(() => Math.random() - 0.5)
       .map((p) => ({
@@ -956,9 +990,12 @@ export function App() {
       status: 'PLAYING',
       currentPlayers: shuffled,
       currentTurnIndex: 0,
+      totalRounds,
       round: 1,
+      starterChar: initialStarter,
+      roundHistoryWords: historyStarters,
       turnDuration: 15.0,
-      lastWord: undefined,
+      lastWord: initialStarter,
       usedWords: [],
       wordChain: [],
       startTime: Date.now(),
@@ -966,7 +1003,7 @@ export function App() {
 
     setActiveRoom(updatedRoom);
     sounds.playPop();
-    sendRoomAction('START_GAME');
+    sendRoomAction('START_GAME', { starterChar: initialStarter, totalRounds });
     saveRoomToServer(updatedRoom);
     broadcastRoomEvent('SYNC_ROOM', { room: updatedRoom });
   };
@@ -995,7 +1032,7 @@ export function App() {
     const activePlayer = activeRoom.currentPlayers[activeRoom.currentTurnIndex];
     if (!activePlayer) return;
 
-    const earnedPoints = word.length * 100 + (isDueum ? 50 : 0);
+    const earnedPoints = word.length * 10 + (isDueum ? 5 : 0);
 
     const newChainItem: WordChainItem = {
       id: 'chain_' + Date.now(),
@@ -1032,7 +1069,6 @@ export function App() {
       lastWord: word,
       usedWords: [...activeRoom.usedWords, word],
       wordChain: newWordChain,
-      round: activeRoom.round + 1,
     };
 
     // Update user stats history if it's me
@@ -1071,34 +1107,77 @@ export function App() {
     broadcastRoomEvent('SYNC_ROOM', { room: updatedRoom });
   };
 
-  // Player Timeout / Elimination
+  // Player Timeout / Elimination with score deduction (-74점) and Multi-round progression
   const handlePlayerTimeout = (playerId: string) => {
     if (!activeRoom) return;
 
+    const penaltyPoints = 74;
     const currentChainLength = activeRoom.wordChain ? activeRoom.wordChain.length : 0;
     const currentTurnDuration = Math.max(5.0, Number((15.0 - currentChainLength * 0.2).toFixed(1)));
 
+    // Score deduction for loser
     const updatedPlayers = activeRoom.currentPlayers.map((p) => {
       if (p.id === playerId) {
         return {
           ...p,
+          score: p.score - penaltyPoints,
           isAlive: false,
-          eliminatedReason: `${currentTurnDuration.toFixed(1)}초 시간 초과`,
+          eliminatedReason: `시간 초과 (-${penaltyPoints}점)`,
         };
       }
       return p;
     });
 
     const alivePlayers = updatedPlayers.filter((p) => p.isAlive);
+    const totalRounds = activeRoom.totalRounds || 3;
+    const currentRound = activeRoom.round || 1;
 
-    // Check if only 1 player remains (Winner found!)
+    // Check if round ends (1 or 0 players remain alive)
     if (alivePlayers.length <= 1) {
-      const winner = alivePlayers[0];
-      const isMeWinner = winner?.id === myPlayerId;
+      // Check if there are more rounds to play
+      if (currentRound < totalRounds) {
+        // Start Next Round!
+        const nextRound = currentRound + 1;
+        const nextStarter = getRandomStarter();
+        const updatedHistory = [...(activeRoom.roundHistoryWords || Array(totalRounds).fill('?'))];
+        updatedHistory[nextRound - 1] = nextStarter;
+
+        // Revive all players for the new round while keeping cumulative scores
+        const revivedPlayers = updatedPlayers.map((p) => ({
+          ...p,
+          isAlive: true,
+          eliminatedReason: undefined,
+        }));
+
+        const nextRoundRoom: GameRoom = {
+          ...activeRoom,
+          round: nextRound,
+          starterChar: nextStarter,
+          lastWord: nextStarter,
+          roundHistoryWords: updatedHistory,
+          currentPlayers: revivedPlayers,
+          currentTurnIndex: 0,
+          usedWords: [],
+          wordChain: [],
+          turnDuration: 15.0,
+        };
+
+        setActiveRoom(nextRoundRoom);
+        sendRoomAction('START_NEXT_ROUND', { round: nextRound, starterChar: nextStarter });
+        saveRoomToServer(nextRoundRoom);
+        broadcastRoomEvent('SYNC_ROOM', { room: nextRoundRoom });
+        return;
+      }
+
+      // Final Round Finished: Determine match winner by highest score
+      const sortedByScore = [...updatedPlayers].sort((a, b) => b.score - a.score);
+      const overallWinner = sortedByScore[0];
+      const isMeWinner = overallWinner?.id === myPlayerId;
 
       const finishedRoom: GameRoom = {
         ...activeRoom,
         status: 'FINISHED',
+        winner: overallWinner,
         currentPlayers: updatedPlayers,
       };
 
@@ -1252,6 +1331,7 @@ export function App() {
                 onAddTestPlayer={handleAddTestPlayer}
                 onChangeColor={handleChangeColor}
                 onOpenShareModal={() => setIsShareOpen(true)}
+                onChangeTotalRounds={handleChangeTotalRounds}
               />
             ) : (
               <GameView

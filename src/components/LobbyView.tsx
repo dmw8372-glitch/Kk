@@ -16,6 +16,7 @@ interface LobbyViewProps {
   onAddTestPlayer: () => void;
   onChangeColor: (color: string) => void;
   onOpenShareModal: () => void;
+  onChangeTotalRounds?: (rounds: number) => void;
 }
 
 export const LobbyView: React.FC<LobbyViewProps> = ({
@@ -29,6 +30,7 @@ export const LobbyView: React.FC<LobbyViewProps> = ({
   onAddTestPlayer,
   onChangeColor,
   onOpenShareModal,
+  onChangeTotalRounds,
 }) => {
   const [chatInput, setChatInput] = useState('');
   const [copiedCode, setCopiedCode] = useState(false);
@@ -156,24 +158,65 @@ export const LobbyView: React.FC<LobbyViewProps> = ({
         </div>
       </div>
 
-      {/* Control Banner: Color picker & Start Button (Image 2 style) */}
+      {/* Control Banner: Color picker, Round settings & Start Button */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-4 flex flex-wrap items-center justify-between gap-4">
-        {/* Left: Color selector */}
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-bold text-slate-500 mr-1">내 색상:</span>
-          <div className="flex items-center gap-1.5">
-            {colorOptions.map((c) => (
-              <button
-                key={c.id}
-                onClick={() => {
-                  onChangeColor(c.id);
-                  sounds.playPop();
-                }}
-                className={`w-6 h-6 rounded-md ${c.bg} transition-transform ${
-                  me?.avatarColor === c.id ? 'scale-125 ring-2 ring-purple-600' : 'hover:scale-110'
-                }`}
-              />
-            ))}
+        {/* Left: Color selector & Round config */}
+        <div className="flex flex-wrap items-center gap-5">
+          {/* Color selector */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-slate-500 mr-1">내 색상:</span>
+            <div className="flex items-center gap-1.5">
+              {colorOptions.map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => {
+                    onChangeColor(c.id);
+                    sounds.playPop();
+                  }}
+                  className={`w-6 h-6 rounded-md ${c.bg} transition-transform ${
+                    me?.avatarColor === c.id ? 'scale-125 ring-2 ring-purple-600' : 'hover:scale-110'
+                  }`}
+                />
+              ))}
+            </div>
+          </div>
+
+          <div className="h-4 w-px bg-slate-200 hidden sm:block" />
+
+          {/* Round Selector (3라운드 / 5라운드) */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-slate-500">라운드 수:</span>
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+              {[3, 5].map((rounds) => {
+                const currentTotal = room.totalRounds || 3;
+                const isSelected = currentTotal === rounds;
+                return (
+                  <button
+                    key={rounds}
+                    type="button"
+                    disabled={!isHost}
+                    onClick={() => {
+                      if (isHost && onChangeTotalRounds) {
+                        sounds.playPop();
+                        onChangeTotalRounds(rounds);
+                      }
+                    }}
+                    className={`px-3 py-1 text-xs font-black rounded-lg transition-all ${
+                      isSelected
+                        ? 'bg-purple-700 text-white shadow-xs'
+                        : isHost
+                        ? 'text-slate-600 hover:bg-slate-200 cursor-pointer'
+                        : 'text-slate-400 cursor-default'
+                    }`}
+                  >
+                    {rounds}라운드
+                  </button>
+                );
+              })}
+            </div>
+            {!isHost && (
+              <span className="text-[10px] text-slate-400 font-semibold">(방장 설정)</span>
+            )}
           </div>
         </div>
 

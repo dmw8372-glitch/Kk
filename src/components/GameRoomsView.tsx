@@ -9,7 +9,7 @@ interface GameRoomsViewProps {
   userStats: UserStats;
   onRefreshRooms: () => void;
   isRefreshing: boolean;
-  onCreateRoom: (title: string, maxPlayers: number, isPublic: boolean) => void;
+  onCreateRoom: (title: string, maxPlayers: number, isPublic: boolean, totalRounds?: number) => void;
   onJoinRoom: (roomId: string) => void;
 }
 
@@ -31,6 +31,7 @@ export const GameRoomsView: React.FC<GameRoomsViewProps> = ({
   // Create room form state
   const [roomTitle, setRoomTitle] = useState(`${userStats.nickname}님의 방`);
   const [maxPlayers, setMaxPlayers] = useState(8);
+  const [totalRounds, setTotalRounds] = useState(3);
   const [isPublic, setIsPublic] = useState(true);
 
   // Filtered rooms
@@ -47,7 +48,7 @@ export const GameRoomsView: React.FC<GameRoomsViewProps> = ({
     e.preventDefault();
     if (!roomTitle.trim()) return;
     sounds.playPop();
-    onCreateRoom(roomTitle.trim(), maxPlayers, isPublic);
+    onCreateRoom(roomTitle.trim(), maxPlayers, isPublic, totalRounds);
   };
 
   const handleDirectJoinSubmit = (e: React.FormEvent) => {
@@ -304,6 +305,30 @@ export const GameRoomsView: React.FC<GameRoomsViewProps> = ({
                       }`}
                     >
                       {count}명
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Total Rounds */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center justify-between">
+                  <span>총 라운드 수 설정</span>
+                  <span className="text-purple-700 font-black">{totalRounds}라운드</span>
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[3, 5].map((count) => (
+                    <button
+                      key={count}
+                      type="button"
+                      onClick={() => setTotalRounds(count)}
+                      className={`py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        totalRounds === count
+                          ? 'bg-purple-700 text-white shadow-xs scale-102 ring-2 ring-purple-400'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                      }`}
+                    >
+                      {count} 라운드
                     </button>
                   ))}
                 </div>

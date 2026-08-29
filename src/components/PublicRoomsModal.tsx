@@ -8,7 +8,7 @@ interface PublicRoomsModalProps {
   isOpen: boolean;
   onClose: () => void;
   publicRooms: GameRoom[];
-  onCreateRoom: (title: string, maxPlayers: number, isPublic: boolean) => void;
+  onCreateRoom: (title: string, maxPlayers: number, isPublic: boolean, totalRounds?: number) => void;
   onJoinRoom: (roomId: string) => void;
   defaultHostName: string;
 }
@@ -25,6 +25,7 @@ export const PublicRoomsModal: React.FC<PublicRoomsModalProps> = ({
   const [directCode, setDirectCode] = useState('');
   const [roomTitle, setRoomTitle] = useState(`${defaultHostName} 님의 방`);
   const [maxPlayers, setMaxPlayers] = useState(8);
+  const [totalRounds, setTotalRounds] = useState(3);
   const [searchQuery, setSearchQuery] = useState('');
 
   if (!isOpen) return null;
@@ -36,7 +37,7 @@ export const PublicRoomsModal: React.FC<PublicRoomsModalProps> = ({
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
     if (!roomTitle.trim()) return;
-    onCreateRoom(roomTitle.trim(), maxPlayers, true);
+    onCreateRoom(roomTitle.trim(), maxPlayers, true, totalRounds);
     sounds.playPop();
     onClose();
   };
@@ -228,6 +229,28 @@ export const PublicRoomsModal: React.FC<PublicRoomsModalProps> = ({
                       }`}
                     >
                       {count}명
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  총 라운드 수 (3라운드 / 5라운드)
+                </label>
+                <div className="flex items-center gap-2">
+                  {[3, 5].map((count) => (
+                    <button
+                      key={count}
+                      type="button"
+                      onClick={() => setTotalRounds(count)}
+                      className={`flex-1 py-2 rounded-xl text-xs font-bold transition-colors ${
+                        totalRounds === count
+                          ? 'bg-purple-700 text-white'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                      }`}
+                    >
+                      {count} 라운드
                     </button>
                   ))}
                 </div>

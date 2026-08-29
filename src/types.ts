@@ -36,12 +36,16 @@ export interface GameRoom {
   currentPlayers: Player[];
   status: GameState;
   currentTurnIndex: number;
-  turnDuration: number; // 5 seconds
+  turnDuration: number; // current turn countdown limit
+  totalRounds: number; // 3 or 5 rounds (default 3)
+  roundTime: number; // total round duration in seconds e.g. 90
+  round: number; // current round number (1, 2, 3...)
+  starterChar?: string; // Random starting character e.g. '벌', '수', '곡'
+  roundHistoryWords?: string[]; // Starter syllables for each round e.g. ['곡', '벌', '?']
   wordChain: WordChainItem[];
   usedWords: string[];
   lastWord?: string;
   currentRequiredChars?: string[]; // e.g. ['리', '이'] for 두음법칙
-  round: number;
   winner?: Player;
   createdAt: number;
   startTime?: number;
