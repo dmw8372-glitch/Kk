@@ -225,37 +225,13 @@ export async function checkWordInDictionary(
       }
     }
   } catch (err) {
-    console.warn('Dictionary validation network lookup fallback:', err);
+    console.warn('Dictionary validation network lookup error:', err);
   }
 
-  // 4. Fallback: 순수 완성형 한글 2~6글자 단어는 유효한 어휘로 승인하여 끝말잇기 게임이 막히지 않도록 보장
-  if (isPureHangul(trimmed) && trimmed.length >= 2 && trimmed.length <= 6) {
-    const fallbackInfo: DictionaryWord = {
-      word: trimmed,
-      pos: '명사',
-      meaning: `한국어 어휘집에 수록된 유효한 낱말입니다.`,
-      definitions: [`한국어 어휘집에 수록된 유효한 낱말입니다.`],
-      senses: [
-        {
-          senseNo: 1,
-          definition: `한국어 어휘집에 수록된 유효한 낱말입니다.`,
-          pos: '명사',
-          origin: '표준어',
-        },
-      ],
-      length: trimmed.length,
-      firstChar: trimmed[0],
-      lastChar: trimmed[trimmed.length - 1],
-      origin: '표준어',
-      source: 'LEXICON',
-    };
-    REAL_API_WORD_CACHE.set(trimmed, fallbackInfo);
-    return { isValid: true, wordInfo: fallbackInfo, source: 'LEXICON' };
-  }
-
+  // 4. 사전 어디에도 없는 경우 정확히 거부
   return {
     isValid: false,
-    reason: '사전에 등재되지 않은 단어입니다.',
+    reason: '국립국어원 표준국어대사전에 등재되지 않은 단어입니다.',
   };
 }
 

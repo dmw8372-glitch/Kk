@@ -733,7 +733,34 @@ app.get('/api/dict/search', async (req, res) => {
       });
     }
 
-    // 3. 위키낱말사전 fallback
+    // 3. 국립국어원 우리말샘 Open API 추가 검색 (동음이의어 및 표제어 폭넓은 검증)
+    if (apiItems.length === 0) {
+      try {
+        const opendictUrl = `https://opendict.korean.go.kr/api/search?key=${encodeURIComponent(
+          apiKey
+        )}&q=${encodeURIComponent(word)}&req_type=json&advanced=y&method=exact&type1=word&num=20`;
+        const openRes = await fetch(opendictUrl, {
+          headers: { Accept: 'application/json' },
+        });
+        if (openRes.ok) {
+          const openText = await openRes.text();
+          try {
+            const openData = JSON.parse(openText);
+            if (openData?.channel?.item && Array.isArray(openData.channel.item)) {
+              apiItems = openData.channel.item;
+            } else if (openData?.channel?.item && typeof openData.channel.item === 'object') {
+              apiItems = [openData.channel.item];
+            }
+          } catch {
+            // ignore
+          }
+        }
+      } catch (openErr) {
+        console.error('OpenDict lookup error:', openErr);
+      }
+    }
+
+    // 4. 위키낱말사전 fallback (정규 표제어 문서 존재 여부 정밀 검증)
     try {
       const wiktionaryUrl = `https://ko.wiktionary.org/w/api.php?action=query&prop=extracts&exintro=true&explaintext=true&titles=${encodeURIComponent(
         word
@@ -750,82 +777,53 @@ app.get('/api/dict/search', async (req, res) => {
 
         if (pageId && pageId !== '-1') {
           const extract = pages[pageId]?.extract || '';
-          let cleanMeaning = extract
-            .replace(/==.*?==/g, '')
-            .replace(/\[\[.*?\]\]/g, '')
-            .trim();
+          if (extract.trim().length > 0) {
+            let cleanMeaning = extract
+              .replace(/==.*?==/g, '')
+              .replace(/\[\[.*?\]\]/g, '')
+              .trim();
 
-          const rawLines = cleanMeaning
-            .split('\n')
-            .map((l) => l.trim())
-            .filter((l) => l.length > 3 && !l.startsWith('='));
+            const rawLines = cleanMeaning
+              .split('\n')
+              .map((l) => l.trim())
+              .filter((l) => l.length > 3 && !l.startsWith('='));
 
-          const definitions = rawLines.length > 0 ? rawLines.slice(0, 5) : [cleanMeaning];
-          const senses = definitions.map((d, i) => ({
-            senseNo: i + 1,
-            definition: d.replace(/^[0-9]+[.)]\s*/, ''),
-            pos: '명사',
-            origin: '표준어',
-          }));
+            const definitions = rawLines.length > 0 ? rawLines.slice(0, 5) : [cleanMeaning];
+            const senses = definitions.map((d, i) => ({
+              senseNo: i + 1,
+              definition: d.replace(/^[0-9]+[.)]\s*/, ''),
+              pos: extract.includes('명사') ? '명사' : '표준어',
+              origin: '표준어',
+            }));
 
-          return res.json({
-            found: true,
-            items: [
-              {
-                id: `${word}-wiki`,
-                word,
-                pos: extract.includes('명사') ? '명사' : '표준어',
-                meaning: senses[0]?.definition || cleanMeaning,
-                definitions,
-                senses,
-                length: word.length,
-                firstChar: word[0],
-                lastChar: word[word.length - 1],
-                origin: '표준어',
-                source: 'WIKTIONARY',
-              },
-            ],
-            source: 'WIKTIONARY',
-            attribution: '한국어 사전 정보',
-          });
+            return res.json({
+              found: true,
+              items: [
+                {
+                  id: `${word}-wiki`,
+                  word,
+                  pos: extract.includes('명사') ? '명사' : '표준어',
+                  meaning: senses[0]?.definition || cleanMeaning,
+                  definitions,
+                  senses,
+                  length: word.length,
+                  firstChar: word[0],
+                  lastChar: word[word.length - 1],
+                  origin: '표준어',
+                  source: 'WIKTIONARY',
+                },
+              ],
+              source: 'WIKTIONARY',
+              attribution: '한국어 사전 정보',
+            });
+          }
         }
       }
     } catch (wikiErr) {
       console.error('Wiktionary fallback error:', wikiErr);
     }
 
-    // 4. Hangul Lexicon & Standard word verification fallback
-    const isHangulWord = /^[가-힣]{2,7}$/.test(word);
-    if (isHangulWord) {
-      return res.json({
-        found: true,
-        items: [
-          {
-            id: `${word}-std`,
-            word,
-            pos: '명사',
-            meaning: '국립국어원 표준국어대사전 및 한국어 어휘집에 등재된 유효한 낱말입니다.',
-            definitions: ['1. 국립국어원 표준국어대사전 및 한국어 어휘집에 등재된 유효한 낱말입니다.'],
-            senses: [
-              {
-                senseNo: 1,
-                definition: '국립국어원 표준국어대사전 및 한국어 어휘집에 등재된 유효한 낱말입니다.',
-                pos: '명사',
-                origin: '표준어',
-              },
-            ],
-            length: word.length,
-            firstChar: word[0],
-            lastChar: word[word.length - 1],
-            origin: '표준어',
-            source: 'STDICT',
-          },
-        ],
-        source: 'STDICT',
-        attribution: '표준국어대사전 및 어휘집',
-      });
-    }
-
+    // 일치하는 사전 표제어가 없을 경우 미등재 단어로 정확히 거부
     return res.json({
       found: false,
       items: [],
