@@ -160,11 +160,97 @@ DICTIONARY_DATABASE.forEach((w) => {
 // 실시간 API 조회된 단어 캐시 (중복 네트워크 요청 방지)
 export const REAL_API_WORD_CACHE = new Map<string, DictionaryWord>();
 
+// Helper to clean Korean dictionary headwords (removes -, --, _, ^, ㆍ, ~, spaces, numbers)
+function cleanDictWord(rawWord: string): string {
+  if (!rawWord) return '';
+  return String(rawWord)
+    .replace(/[0-9\-^_ㆍ~^ \t]/g, '')
+    .trim();
+}
+
+/**
+ * 클라이언트 사이드 국립국어원 / 위키낱말사전 직접 조회 (정적 사이트 배포 시 서버 없이 작동)
+ * 주의: 클라이언트 환경에서 직접 Open API를 호출하거나 공개 위키낱말사전 CORS 엔드포인트를 사용합니다.
+ */
+async function fetchClientSideDictionaryFallback(
+  word: string,
+  signal?: AbortSignal
+): Promise<{ found: boolean; items: DictionaryWord[]; attribution?: string }> {
+  const clean = cleanDictWord(word);
+  if (!clean) return { found: false, items: [] };
+
+  // 1. 위키낱말사전 (브라우저 CORS 완전 지원)
+  try {
+    const wikiUrl = `https://ko.wiktionary.org/w/api.php?action=query&prop=extracts&exintro=true&explaintext=true&titles=${encodeURIComponent(
+      clean
+    )}&format=json&origin=*`;
+
+    const wikiRes = await fetch(wikiUrl, { signal });
+    if (wikiRes.ok) {
+      const wikiData = await wikiRes.json();
+      const pages = wikiData?.query?.pages || {};
+      const pageKey = Object.keys(pages)[0];
+
+      if (pageKey && pageKey !== '-1') {
+        const page = pages[pageKey];
+        const rawExtract = String(page.extract || '').trim();
+        const cleanDef = rawExtract.replace(/\n+/g, ' ').slice(0, 300);
+
+        const wordItem: DictionaryWord = {
+          id: `wiki-${clean}`,
+          word: clean,
+          pos: '명사',
+          meaning: cleanDef || `${clean}: 국어사전에 등재된 표준어입니다.`,
+          definitions: [cleanDef || `${clean}: 국어사전에 등재된 표준어입니다.`],
+          senses: [
+            {
+              senseNo: 1,
+              definition: cleanDef || `${clean}: 국어사전에 등재된 표준어입니다.`,
+              pos: '명사',
+              origin: '한국어 표준어',
+            },
+          ],
+          length: clean.length,
+          firstChar: clean[0],
+          lastChar: clean[clean.length - 1],
+          origin: '한국어 표제어',
+          source: 'WIKTIONARY',
+        };
+
+        REAL_API_WORD_CACHE.set(clean, wordItem);
+        return {
+          found: true,
+          items: [wordItem],
+          attribution: '위키낱말사전 (CC-BY-SA 4.0)',
+        };
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  // 2. 내장 표준 어휘 데이터베이스 검색 (완전 일치 + 시작 단어)
+  const localMatches = DICTIONARY_DATABASE.filter(
+    (w) => w.word === clean || w.word.startsWith(clean)
+  );
+
+  if (localMatches.length > 0) {
+    return {
+      found: true,
+      items: localMatches,
+      attribution: '표준 국어 어휘 데이터베이스',
+    };
+  }
+
+  return { found: false, items: [] };
+}
+
 /**
  * 단어 유효성 검사 및 국어사전 실시간 조회
  * 1. 내장 표준 어휘 데이터베이스 검사
  * 2. 캐시 검사
- * 3. /api/dict/search (국립국어원 표준국어대사전 Open API) 실시간 조회
+ * 3. /api/dict/search (국립국어원 표준국어대사전 Open API / Cloudflare Functions) 실시간 조회
+ * 4. 정적 호스팅 시 클라이언트 사이드 fallback (위키낱말사전 + 확장 어휘 DB)
  */
 export async function checkWordInDictionary(
   word: string
@@ -174,7 +260,7 @@ export async function checkWordInDictionary(
   reason?: string;
   source?: 'STDICT' | 'WIKTIONARY' | 'LEXICON';
 }> {
-  const trimmed = word.trim();
+  const trimmed = cleanDictWord(word);
   if (trimmed.length < 2) {
     return { isValid: false, reason: '단어는 최소 2글자 이상이어야 합니다.' };
   }
@@ -202,6 +288,7 @@ export async function checkWordInDictionary(
         const item = data.items[0];
         const wordInfo: DictionaryWord = {
           word: item.word || trimmed,
+          supNo: item.supNo,
           pos: item.pos || '명사',
           meaning: item.meaning || '국립국어원 표준국어대사전에 등재된 표준어입니다.',
           definitions: item.definitions || [item.meaning || '국립국어원 표준국어대사전에 등재된 표준어입니다.'],
@@ -217,6 +304,7 @@ export async function checkWordInDictionary(
           firstChar: trimmed[0],
           lastChar: trimmed[trimmed.length - 1],
           origin: item.origin || '표준어',
+          targetCode: item.targetCode,
           source: data.source || 'STDICT',
         };
 
@@ -225,10 +313,18 @@ export async function checkWordInDictionary(
       }
     }
   } catch (err) {
-    console.warn('Dictionary validation network lookup error:', err);
+    console.warn('Dictionary validation API lookup error, switching to static fallback:', err);
   }
 
-  // 4. 사전 어디에도 없는 경우 정확히 거부
+  // 4. 정적 사이트 배포 환경을 위한 클라이언트 사이드 fallback
+  const staticFallback = await fetchClientSideDictionaryFallback(trimmed);
+  if (staticFallback.found && staticFallback.items.length > 0) {
+    const fallbackItem = staticFallback.items[0];
+    REAL_API_WORD_CACHE.set(trimmed, fallbackItem);
+    return { isValid: true, wordInfo: fallbackItem, source: fallbackItem.source || 'WIKTIONARY' };
+  }
+
+  // 5. 사전 어디에도 없는 경우 정확히 거부
   return {
     isValid: false,
     reason: '국립국어원 표준국어대사전에 등재되지 않은 단어입니다.',
@@ -242,7 +338,7 @@ export async function fetchDictionarySearchResults(
   query: string,
   signal?: AbortSignal
 ): Promise<{ found: boolean; items: DictionaryWord[]; attribution?: string }> {
-  const trimmed = query.trim();
+  const trimmed = cleanDictWord(query);
   if (!trimmed) {
     return { found: false, items: [] };
   }
@@ -252,7 +348,7 @@ export async function fetchDictionarySearchResults(
     const res = await fetch(url, { signal });
     if (res.ok) {
       const data = await res.json();
-      if (data.found && data.items && Array.isArray(data.items)) {
+      if (data.found && data.items && Array.isArray(data.items) && data.items.length > 0) {
         return {
           found: true,
           items: data.items,
@@ -264,23 +360,11 @@ export async function fetchDictionarySearchResults(
     if (err.name === 'AbortError') {
       return { found: false, items: [] };
     }
-    console.error('Dictionary API search error:', err);
+    console.warn('Dictionary API search error, using client-side fallback:', err);
   }
 
-  // Fallback: check local standard dictionary database
-  const localMatches = DICTIONARY_DATABASE.filter(
-    (w) => w.word === trimmed || w.word.startsWith(trimmed)
-  );
-
-  if (localMatches.length > 0) {
-    return {
-      found: true,
-      items: localMatches,
-      attribution: '표준 국어 어휘 데이터베이스',
-    };
-  }
-
-  return { found: false, items: [] };
+  // 정적 사이트(Static) 배포 시 클라이언트 직접 검색 fallback
+  return fetchClientSideDictionaryFallback(trimmed, signal);
 }
 
 /**
@@ -291,14 +375,16 @@ export async function exploreDictionaryWords(
   query: string = '',
   signal?: AbortSignal
 ): Promise<{ words: DictionaryWord[]; hasMore: boolean }> {
+  const trimmed = cleanDictWord(query);
+
   try {
     const res = await fetch(
-      `/api/dict/explore?page=${page}&num=20&q=${encodeURIComponent(query)}`,
+      `/api/dict/explore?page=${page}&num=20&q=${encodeURIComponent(trimmed)}`,
       { signal }
     );
     if (res.ok) {
       const data = await res.json();
-      if (data.words && Array.isArray(data.words)) {
+      if (data.words && Array.isArray(data.words) && data.words.length > 0) {
         return { words: data.words, hasMore: data.hasMore !== false };
       }
     }
@@ -306,9 +392,23 @@ export async function exploreDictionaryWords(
     if (err.name === 'AbortError') {
       return { words: [], hasMore: false };
     }
-    console.error('Explore API error:', err);
+    console.warn('Explore API error, using static database pagination:', err);
   }
-  return { words: [], hasMore: false };
+
+  // 정적 환경 Fallback: 내장 표준 어휘 데이터베이스에서 페이징
+  const pageSize = 20;
+  const filtered = trimmed
+    ? DICTIONARY_DATABASE.filter(
+        (w) => w.word.includes(trimmed) || w.meaning.includes(trimmed)
+      )
+    : DICTIONARY_DATABASE;
+
+  const startIndex = (page - 1) * pageSize;
+  const pageWords = filtered.slice(startIndex, startIndex + pageSize);
+  return {
+    words: pageWords,
+    hasMore: startIndex + pageSize < filtered.length,
+  };
 }
 
 /**
