@@ -7,6 +7,7 @@ import { GameView } from './components/GameView';
 import { GameRoomsView } from './components/GameRoomsView';
 import { DictionaryView } from './components/DictionaryView';
 import { MyRecordsView } from './components/MyRecordsView';
+import { SettingsView } from './components/SettingsView';
 import { RulesModal } from './components/RulesModal';
 import { NoticeModal } from './components/NoticeModal';
 import { PublicRoomsModal } from './components/PublicRoomsModal';
@@ -55,6 +56,24 @@ export function App() {
     }
     return id;
   });
+
+  // Sync userStats to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('kkeutitgi_user_stats', JSON.stringify(userStats));
+    } catch (e) {
+      console.error('Failed to save userStats to localStorage:', e);
+    }
+  }, [userStats]);
+
+  const handleResetStats = () => {
+    setUserStats(INITIAL_STATS);
+    try {
+      localStorage.removeItem('kkeutitgi_user_stats');
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   // Navigation & View state
   const [currentTab, setCurrentTab] = useState<string>('HOME');
@@ -1523,6 +1542,13 @@ export function App() {
             />
           ) : currentTab === 'DICT' ? (
             <DictionaryView initialSearch={dictSearchWord} />
+          ) : currentTab === 'SETTINGS' ? (
+            <SettingsView
+              userStats={userStats}
+              onUpdateUserStats={(updated) => setUserStats((prev) => ({ ...prev, ...updated }))}
+              onResetStats={handleResetStats}
+              onOpenRules={() => setIsRulesOpen(true)}
+            />
           ) : (
             <MyRecordsView userStats={userStats} onSelectTab={setCurrentTab} />
           )}

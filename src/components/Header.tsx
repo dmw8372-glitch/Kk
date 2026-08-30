@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
-import { Bell, HelpCircle, Volume2, VolumeX, User, ChevronDown, Sparkles, Check, RefreshCw, Music } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Bell, HelpCircle, Volume2, VolumeX, User, ChevronDown, Sparkles, Check, RefreshCw, Music, Settings } from 'lucide-react';
 import { UserStats } from '../types';
-import { sounds } from '../lib/soundEffects';
+import { sounds, SoundSettings } from '../lib/soundEffects';
 
 interface HeaderProps {
   currentTab: string;
@@ -23,26 +23,36 @@ export const Header: React.FC<HeaderProps> = ({
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [editNickname, setEditNickname] = useState(userStats.nickname);
   const [selectedColor, setSelectedColor] = useState(userStats.avatarColor);
-  const [isMuted, setIsMuted] = useState(sounds.getIsMuted());
-  const [isBgmEnabled, setIsBgmEnabled] = useState(sounds.getIsBgmEnabled());
+  const [soundSettings, setSoundSettings] = useState<SoundSettings>(sounds.getSettings());
+
+  useEffect(() => {
+    const unsub = sounds.subscribe((st) => {
+      setSoundSettings(st);
+    });
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    setEditNickname(userStats.nickname);
+    setSelectedColor(userStats.avatarColor);
+  }, [userStats.nickname, userStats.avatarColor]);
 
   const navItems = [
     { id: 'HOME', label: '홈' },
     { id: 'GAME', label: '게임' },
     { id: 'DICT', label: '단어 사전' },
     { id: 'MY', label: '내 기록' },
+    { id: 'SETTINGS', label: '설정' },
   ];
 
   const handleToggleMute = () => {
-    const next = !isMuted;
-    sounds.setMuted(next);
-    setIsMuted(next);
+    const next = sounds.toggleMute();
     if (!next) sounds.playPop();
   };
 
   const handleToggleBgm = () => {
     const next = sounds.toggleBGM();
-    setIsBgmEnabled(next);
+    if (next) sounds.playPop();
   };
 
   const handleSaveProfile = () => {
@@ -95,7 +105,7 @@ export const Header: React.FC<HeaderProps> = ({
                     sounds.playPop();
                     onSelectTab(item.id);
                   }}
-                  className={`relative px-4 py-2 text-sm font-semibold transition-colors ${
+                  className={`relative px-3.5 py-2 text-sm font-semibold transition-colors cursor-pointer ${
                     active ? 'text-[#1e2022]' : 'text-slate-500 hover:text-slate-800'
                   }`}
                 >
@@ -110,43 +120,59 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         {/* Right Controls */}
-        <div className="flex items-center gap-1.5 sm:gap-2">
+        <div className="flex items-center gap-1 sm:gap-1.5">
           {/* BGM Music Toggle */}
           <button
             onClick={handleToggleBgm}
-            className={`p-2 rounded-full transition-colors ${
-              isBgmEnabled
+            className={`p-2 rounded-full transition-colors cursor-pointer ${
+              soundSettings.isBgmEnabled && !soundSettings.isMuted
                 ? 'text-purple-600 hover:bg-purple-50'
                 : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'
             }`}
-            title={isBgmEnabled ? '배경음악(BGM) 끄기' : '배경음악(BGM) 켜기'}
+            title={soundSettings.isBgmEnabled ? '배경음악(BGM) 끄기' : '배경음악(BGM) 켜기'}
           >
-            <Music className={`w-5 h-5 ${isBgmEnabled ? 'text-purple-600' : 'text-slate-400'}`} />
+            <Music className={`w-5 h-5 ${soundSettings.isBgmEnabled && !soundSettings.isMuted ? 'text-purple-600' : 'text-slate-400'}`} />
           </button>
 
           {/* Sound Toggle */}
           <button
             onClick={handleToggleMute}
-            className="p-2 text-slate-500 hover:text-[#1e2022] hover:bg-slate-100 rounded-full transition-colors"
-            title={isMuted ? '효과음 켜기' : '효과음 끄기'}
+            className="p-2 text-slate-500 hover:text-[#1e2022] hover:bg-slate-100 rounded-full transition-colors cursor-pointer"
+            title={soundSettings.isMuted ? '효과음 켜기' : '효과음 끄기'}
           >
-            {isMuted ? <VolumeX className="w-5 h-5 text-rose-500" /> : <Volume2 className="w-5 h-5" />}
+            {soundSettings.isMuted ? <VolumeX className="w-5 h-5 text-rose-500" /> : <Volume2 className="w-5 h-5" />}
           </button>
 
           {/* Notifications Button */}
           <button
             onClick={onOpenNotices}
-            className="relative p-2 text-slate-500 hover:text-[#1e2022] hover:bg-slate-100 rounded-full transition-colors"
+            className="relative p-2 text-slate-500 hover:text-[#1e2022] hover:bg-slate-100 rounded-full transition-colors cursor-pointer"
             title="공지사항"
           >
             <Bell className="w-5 h-5" />
             <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-purple-600 ring-2 ring-white" />
           </button>
 
+          {/* Settings Tab Shortcut Button */}
+          <button
+            onClick={() => {
+              sounds.playPop();
+              onSelectTab('SETTINGS');
+            }}
+            className={`p-2 rounded-full transition-colors cursor-pointer ${
+              currentTab === 'SETTINGS'
+                ? 'text-purple-600 bg-purple-50'
+                : 'text-slate-500 hover:text-[#1e2022] hover:bg-slate-100'
+            }`}
+            title="환경 및 프로필 설정"
+          >
+            <Settings className="w-5 h-5" />
+          </button>
+
           {/* Game Rules Modal Button */}
           <button
             onClick={onOpenRules}
-            className="p-2 text-slate-500 hover:text-[#1e2022] hover:bg-slate-100 rounded-full transition-colors"
+            className="p-2 text-slate-500 hover:text-[#1e2022] hover:bg-slate-100 rounded-full transition-colors cursor-pointer"
             title="공식 게임 규칙"
           >
             <HelpCircle className="w-5 h-5" />
@@ -156,12 +182,12 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="relative">
             <button
               onClick={() => setIsProfileOpen(!isProfileOpen)}
-              className="flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-full border border-slate-200 bg-slate-50 hover:bg-slate-100 transition-colors text-sm font-semibold text-[#1e2022]"
+              className="flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-full border border-slate-200 bg-slate-50 hover:bg-slate-100 transition-colors text-sm font-semibold text-[#1e2022] cursor-pointer"
             >
               <div className="w-6 h-6 rounded-full bg-[#1e2022] text-white flex items-center justify-center text-xs">
                 <User className="w-3.5 h-3.5" />
               </div>
-              <span>{userStats.nickname}</span>
+              <span className="max-w-[80px] sm:max-w-[120px] truncate">{userStats.nickname}</span>
               <ChevronDown className="w-4 h-4 text-slate-400" />
             </button>
 
@@ -171,7 +197,7 @@ export const Header: React.FC<HeaderProps> = ({
                 <div className="flex items-center justify-between mb-3 border-b border-slate-100 pb-2">
                   <div className="flex items-center gap-2">
                     <Sparkles className="w-4 h-4 text-purple-600" />
-                    <span className="font-bold text-sm text-[#1e2022]">내 프로필 설정</span>
+                    <span className="font-bold text-sm text-[#1e2022]">내 프로필 간편 설정</span>
                   </div>
                   <span className="text-xs text-slate-400 font-medium">Lv.{userStats.level}</span>
                 </div>
@@ -183,11 +209,11 @@ export const Header: React.FC<HeaderProps> = ({
                   </label>
                   <input
                     type="text"
-                    maxLength={10}
+                    maxLength={12}
                     value={editNickname}
                     onChange={(e) => setEditNickname(e.target.value)}
                     className="w-full px-3 py-1.5 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-500 font-medium"
-                    placeholder="닉네임 입력 (최대 10자)"
+                    placeholder="닉네임 입력 (최대 12자)"
                   />
                 </div>
 
@@ -202,7 +228,7 @@ export const Header: React.FC<HeaderProps> = ({
                         key={c.id}
                         type="button"
                         onClick={() => setSelectedColor(c.id)}
-                        className={`w-7 h-7 rounded-full border-2 ${c.bg} flex items-center justify-center transition-transform ${
+                        className={`w-7 h-7 rounded-full border-2 ${c.bg} flex items-center justify-center transition-transform cursor-pointer ${
                           selectedColor === c.id ? 'scale-110 ring-2 ring-purple-600' : 'hover:scale-105'
                         }`}
                         title={c.label}
@@ -213,23 +239,37 @@ export const Header: React.FC<HeaderProps> = ({
                   </div>
                 </div>
 
-                {/* Save Button */}
-                <div className="flex items-center gap-2">
+                {/* Save Button & Full Settings Link */}
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        const randomNum = Math.floor(1000 + Math.random() * 9000);
+                        setEditNickname(`손님${randomNum}`);
+                      }}
+                      className="p-2 border border-slate-200 hover:bg-slate-100 rounded-lg text-slate-600 text-xs cursor-pointer"
+                      title="랜덤 닉네임"
+                    >
+                      <RefreshCw className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={handleSaveProfile}
+                      className="flex-1 py-2 bg-[#1e2022] hover:bg-black text-white text-xs font-bold rounded-lg shadow-xs transition-colors cursor-pointer"
+                    >
+                      저장하기
+                    </button>
+                  </div>
+
                   <button
+                    type="button"
                     onClick={() => {
-                      const randomNum = Math.floor(1000 + Math.random() * 9000);
-                      setEditNickname(`손님${randomNum}`);
+                      setIsProfileOpen(false);
+                      onSelectTab('SETTINGS');
                     }}
-                    className="p-2 border border-slate-200 hover:bg-slate-100 rounded-lg text-slate-600 text-xs"
-                    title="랜덤 닉네임"
+                    className="w-full py-1.5 text-xs text-purple-700 bg-purple-50 hover:bg-purple-100 font-bold rounded-lg transition-colors flex items-center justify-center gap-1 cursor-pointer"
                   >
-                    <RefreshCw className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={handleSaveProfile}
-                    className="flex-1 py-2 bg-[#1e2022] hover:bg-black text-white text-xs font-bold rounded-lg shadow-xs transition-colors"
-                  >
-                    변경사항 저장
+                    <Settings className="w-3.5 h-3.5" />
+                    상세 환경/음향 설정으로 이동
                   </button>
                 </div>
               </div>
@@ -240,3 +280,4 @@ export const Header: React.FC<HeaderProps> = ({
     </header>
   );
 };
+

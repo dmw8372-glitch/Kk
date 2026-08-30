@@ -4,18 +4,86 @@
  * 반응성 높은 효과음과 경쾌한 배경음악(BGM)을 실시간 생성합니다. (CC0 1.0 Universal)
  */
 
+export interface SoundSettings {
+  masterVolume: number; // 0.0 ~ 1.0
+  bgmVolume: number;    // 0.0 ~ 1.0
+  sfxVolume: number;    // 0.0 ~ 1.0
+  isMuted: boolean;
+  isBgmEnabled: boolean;
+  isSfxEnabled: boolean;
+}
+
+const STORAGE_KEY = 'kkeutitgi_sound_settings_v2';
+
+const DEFAULT_SETTINGS: SoundSettings = {
+  masterVolume: 1.0,
+  bgmVolume: 0.5,
+  sfxVolume: 0.8,
+  isMuted: false,
+  isBgmEnabled: true,
+  isSfxEnabled: true,
+};
+
 type BgmMode = 'lobby' | 'game';
+type SoundChangeListener = (settings: SoundSettings) => void;
 
 class SoundEngine {
   private ctx: AudioContext | null = null;
-  private isMuted: boolean = false;
-  private isBgmEnabled: boolean = true;
+  private settings: SoundSettings = { ...DEFAULT_SETTINGS };
   private bgmMode: BgmMode = 'lobby';
   private bgmTimer: number | null = null;
   private bgmStep: number = 0;
   private bgmNextNoteTime: number = 0;
   private bgmMasterGain: GainNode | null = null;
-  private bgmVolume: number = 0.12; // Moderate, comfortable background volume
+  private sfxMasterGain: GainNode | null = null;
+  private listeners: Set<SoundChangeListener> = new Set();
+
+  constructor() {
+    this.loadSettings();
+  }
+
+  private loadSettings() {
+    if (typeof window === 'undefined') return;
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        this.settings = {
+          masterVolume: typeof parsed.masterVolume === 'number' ? Math.max(0, Math.min(1, parsed.masterVolume)) : DEFAULT_SETTINGS.masterVolume,
+          bgmVolume: typeof parsed.bgmVolume === 'number' ? Math.max(0, Math.min(1, parsed.bgmVolume)) : DEFAULT_SETTINGS.bgmVolume,
+          sfxVolume: typeof parsed.sfxVolume === 'number' ? Math.max(0, Math.min(1, parsed.sfxVolume)) : DEFAULT_SETTINGS.sfxVolume,
+          isMuted: typeof parsed.isMuted === 'boolean' ? parsed.isMuted : DEFAULT_SETTINGS.isMuted,
+          isBgmEnabled: typeof parsed.isBgmEnabled === 'boolean' ? parsed.isBgmEnabled : DEFAULT_SETTINGS.isBgmEnabled,
+          isSfxEnabled: typeof parsed.isSfxEnabled === 'boolean' ? parsed.isSfxEnabled : DEFAULT_SETTINGS.isSfxEnabled,
+        };
+      }
+    } catch {
+      this.settings = { ...DEFAULT_SETTINGS };
+    }
+  }
+
+  private saveSettings() {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.settings));
+    } catch {
+      // ignore
+    }
+    this.notifyListeners();
+  }
+
+  public subscribe(listener: SoundChangeListener): () => void {
+    this.listeners.add(listener);
+    listener({ ...this.settings });
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  private notifyListeners() {
+    const current = { ...this.settings };
+    this.listeners.forEach((fn) => fn(current));
+  }
 
   private initCtx() {
     if (!this.ctx && typeof window !== 'undefined') {
@@ -29,46 +97,105 @@ class SoundEngine {
     if (this.ctx && this.ctx.state === 'suspended') {
       this.ctx.resume();
     }
+    this.updateGains();
+  }
+
+  private updateGains() {
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+
+    // BGM effective volume (base scaled factor ~0.24 for comfortable ambient listening)
+    const effectiveBgm =
+      this.settings.isMuted || !this.settings.isBgmEnabled
+        ? 0
+        : this.settings.masterVolume * this.settings.bgmVolume * 0.24;
+
+    if (!this.bgmMasterGain) {
+      this.bgmMasterGain = this.ctx.createGain();
+      this.bgmMasterGain.connect(this.ctx.destination);
+    }
+    this.bgmMasterGain.gain.setValueAtTime(effectiveBgm, now);
+
+    // SFX effective volume
+    const effectiveSfx =
+      this.settings.isMuted || !this.settings.isSfxEnabled
+        ? 0
+        : this.settings.masterVolume * this.settings.sfxVolume;
+
+    if (!this.sfxMasterGain) {
+      this.sfxMasterGain = this.ctx.createGain();
+      this.sfxMasterGain.connect(this.ctx.destination);
+    }
+    this.sfxMasterGain.gain.setValueAtTime(effectiveSfx, now);
+  }
+
+  public getSettings(): SoundSettings {
+    return { ...this.settings };
+  }
+
+  public setMasterVolume(vol: number) {
+    this.settings.masterVolume = Math.max(0, Math.min(1, vol));
+    this.updateGains();
+    this.saveSettings();
+  }
+
+  public setBgmVolume(vol: number) {
+    this.settings.bgmVolume = Math.max(0, Math.min(1, vol));
+    this.updateGains();
+    this.saveSettings();
+  }
+
+  public setSfxVolume(vol: number) {
+    this.settings.sfxVolume = Math.max(0, Math.min(1, vol));
+    this.updateGains();
+    this.saveSettings();
   }
 
   public setMuted(muted: boolean) {
-    this.isMuted = muted;
-    if (this.bgmMasterGain && this.ctx) {
-      const now = this.ctx.currentTime;
-      this.bgmMasterGain.gain.setValueAtTime(
-        muted || !this.isBgmEnabled ? 0 : this.bgmVolume,
-        now
-      );
-    }
+    this.settings.isMuted = muted;
+    this.updateGains();
+    this.saveSettings();
   }
 
   public getIsMuted(): boolean {
-    return this.isMuted;
+    return this.settings.isMuted;
   }
 
   public setBgmEnabled(enabled: boolean) {
-    this.isBgmEnabled = enabled;
-    if (this.bgmMasterGain && this.ctx) {
-      const now = this.ctx.currentTime;
-      this.bgmMasterGain.gain.setValueAtTime(
-        this.isMuted || !enabled ? 0 : this.bgmVolume,
-        now
-      );
-    }
+    this.settings.isBgmEnabled = enabled;
+    this.updateGains();
+    this.saveSettings();
     if (enabled && !this.bgmTimer) {
       this.startBGM(this.bgmMode);
+    } else if (!enabled && this.bgmTimer) {
+      this.stopBGM();
     }
   }
 
   public getIsBgmEnabled(): boolean {
-    return this.isBgmEnabled;
+    return this.settings.isBgmEnabled;
   }
 
-  public setBgmVolume(volume: number) {
-    this.bgmVolume = Math.max(0, Math.min(1, volume));
-    if (this.bgmMasterGain && this.ctx && !this.isMuted && this.isBgmEnabled) {
-      this.bgmMasterGain.gain.setValueAtTime(this.bgmVolume, this.ctx.currentTime);
-    }
+  public setSfxEnabled(enabled: boolean) {
+    this.settings.isSfxEnabled = enabled;
+    this.updateGains();
+    this.saveSettings();
+  }
+
+  public getIsSfxEnabled(): boolean {
+    return this.settings.isSfxEnabled;
+  }
+
+  public toggleBGM(): boolean {
+    const next = !this.settings.isBgmEnabled;
+    this.setBgmEnabled(next);
+    return next;
+  }
+
+  public toggleMute(): boolean {
+    const next = !this.settings.isMuted;
+    this.setMuted(next);
+    return next;
   }
 
   // ==========================================
@@ -79,15 +206,6 @@ class SoundEngine {
     this.bgmMode = mode;
     this.initCtx();
     if (!this.ctx) return;
-
-    if (!this.bgmMasterGain) {
-      this.bgmMasterGain = this.ctx.createGain();
-      this.bgmMasterGain.gain.setValueAtTime(
-        this.isMuted || !this.isBgmEnabled ? 0 : this.bgmVolume,
-        this.ctx.currentTime
-      );
-      this.bgmMasterGain.connect(this.ctx.destination);
-    }
 
     if (this.bgmTimer) {
       clearInterval(this.bgmTimer);
@@ -111,12 +229,6 @@ class SoundEngine {
     if (this.bgmMasterGain && this.ctx) {
       this.bgmMasterGain.gain.setValueAtTime(0, this.ctx.currentTime);
     }
-  }
-
-  public toggleBGM(): boolean {
-    const next = !this.isBgmEnabled;
-    this.setBgmEnabled(next);
-    return next;
   }
 
   // Frequency lookup helper for notes
@@ -198,7 +310,7 @@ class SoundEngine {
   }
 
   private scheduleBgmNotes() {
-    if (!this.ctx || this.isMuted || !this.isBgmEnabled) return;
+    if (!this.ctx || this.settings.isMuted || !this.settings.isBgmEnabled) return;
 
     const scheduleAheadTime = 0.15; // Schedule 150ms ahead
 
@@ -294,13 +406,23 @@ class SoundEngine {
     }
   }
 
+  private connectSfx(gain: GainNode) {
+    if (!this.ctx) return;
+    if (!this.sfxMasterGain) {
+      this.sfxMasterGain = this.ctx.createGain();
+      this.sfxMasterGain.connect(this.ctx.destination);
+      this.updateGains();
+    }
+    gain.connect(this.sfxMasterGain);
+  }
+
   // ==========================================
   // 🔔 효과음 (SFX)
   // ==========================================
 
   // 1. 단어 정답 효과음 (경쾌한 벨소리)
   public playCorrect() {
-    if (this.isMuted) return;
+    if (this.settings.isMuted || !this.settings.isSfxEnabled) return;
     this.initCtx();
     if (!this.ctx) return;
 
@@ -322,7 +444,7 @@ class SoundEngine {
 
     osc1.connect(gain);
     osc2.connect(gain);
-    gain.connect(this.ctx.destination);
+    this.connectSfx(gain);
 
     osc1.start(now);
     osc2.start(now + 0.05);
@@ -332,7 +454,7 @@ class SoundEngine {
 
   // 2. 단어 오답 / 탈락 효과음 (낮은 비프음)
   public playWrong() {
-    if (this.isMuted) return;
+    if (this.settings.isMuted || !this.settings.isSfxEnabled) return;
     this.initCtx();
     if (!this.ctx) return;
 
@@ -348,7 +470,7 @@ class SoundEngine {
     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
 
     osc.connect(gain);
-    gain.connect(this.ctx.destination);
+    this.connectSfx(gain);
 
     osc.start(now);
     osc.stop(now + 0.35);
@@ -356,7 +478,7 @@ class SoundEngine {
 
   // 3. 턴 카운트다운 째깍 소리 (5초 중 마지막 2초 긴박감)
   public playTick(urgent: boolean = false) {
-    if (this.isMuted) return;
+    if (this.settings.isMuted || !this.settings.isSfxEnabled) return;
     this.initCtx();
     if (!this.ctx) return;
 
@@ -371,7 +493,7 @@ class SoundEngine {
     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
 
     osc.connect(gain);
-    gain.connect(this.ctx.destination);
+    this.connectSfx(gain);
 
     osc.start(now);
     osc.stop(now + 0.05);
@@ -379,7 +501,7 @@ class SoundEngine {
 
   // 4. 게임 시작 / 버튼 팝 소리
   public playPop() {
-    if (this.isMuted) return;
+    if (this.settings.isMuted || !this.settings.isSfxEnabled) return;
     this.initCtx();
     if (!this.ctx) return;
 
@@ -395,7 +517,7 @@ class SoundEngine {
     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
 
     osc.connect(gain);
-    gain.connect(this.ctx.destination);
+    this.connectSfx(gain);
 
     osc.start(now);
     osc.stop(now + 0.1);
@@ -403,7 +525,7 @@ class SoundEngine {
 
   // 4-1. 플레이어 입장 알림음 (도-미-솔 상승 화음)
   public playJoin() {
-    if (this.isMuted) return;
+    if (this.settings.isMuted || !this.settings.isSfxEnabled) return;
     this.initCtx();
     if (!this.ctx) return;
 
@@ -420,7 +542,7 @@ class SoundEngine {
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
 
       osc.connect(gain);
-      gain.connect(this.ctx!.destination);
+      this.connectSfx(gain);
 
       osc.start(now);
       osc.stop(now + 0.2);
@@ -429,7 +551,7 @@ class SoundEngine {
 
   // 4-2. 게임 시작 효과음
   public playGameStart() {
-    if (this.isMuted) return;
+    if (this.settings.isMuted || !this.settings.isSfxEnabled) return;
     this.initCtx();
     if (!this.ctx) return;
 
@@ -446,7 +568,7 @@ class SoundEngine {
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
 
       osc.connect(gain);
-      gain.connect(this.ctx!.destination);
+      this.connectSfx(gain);
 
       osc.start(now);
       osc.stop(now + 0.3);
@@ -460,7 +582,7 @@ class SoundEngine {
 
   // 5. 최종 승리 팡파르
   public playVictory() {
-    if (this.isMuted) return;
+    if (this.settings.isMuted || !this.settings.isSfxEnabled) return;
     this.initCtx();
     if (!this.ctx) return;
 
@@ -477,7 +599,7 @@ class SoundEngine {
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
 
       osc.connect(gain);
-      gain.connect(this.ctx!.destination);
+      this.connectSfx(gain);
 
       osc.start(now);
       osc.stop(now + 0.4);
