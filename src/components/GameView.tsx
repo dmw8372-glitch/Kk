@@ -29,7 +29,7 @@ export const GameView: React.FC<GameViewProps> = ({
   const [inputText, setInputText] = useState('');
   const [validationError, setValidationError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [chatOpen, setChatOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(true);
   const [chatInput, setChatInput] = useState('');
 
   // Dynamic Turn Duration: Starts at 15.0s, reduces by 0.4s per word in chain, min 5.0s
@@ -336,11 +336,15 @@ export const GameView: React.FC<GameViewProps> = ({
             {isSoundMuted ? <VolumeX className="w-4 h-4 text-rose-500" /> : <Volume2 className="w-4 h-4 text-slate-700" />}
           </button>
 
-          {/* Live Chat Toggle */}
+          {/* Live Chat & Word Dict Toggle */}
           <button
             onClick={() => setChatOpen(!chatOpen)}
-            className="p-1.5 sm:p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors relative cursor-pointer"
-            title="채팅창"
+            className={`p-1.5 sm:p-2 rounded-xl transition-colors relative cursor-pointer ${
+              chatOpen
+                ? 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+            }`}
+            title={chatOpen ? '사전 & 채팅 접기' : '사전 & 채팅 열기'}
           >
             <MessageCircle className="w-4 h-4" />
             {chatMessages.length > 0 && (
@@ -607,7 +611,7 @@ export const GameView: React.FC<GameViewProps> = ({
         </div>
 
         {/* Right 1 col: Word Definition & Live Chat */}
-        <div className={`flex flex-col gap-3 sm:gap-4 ${chatOpen ? 'block' : 'hidden lg:flex'}`}>
+        <div className={`flex flex-col gap-3 sm:gap-4 ${chatOpen ? 'flex' : 'hidden lg:flex'}`}>
           {/* Latest Word Dictionary Card (Image 3 right widget) */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-4 flex flex-col">
             <div className="flex items-center gap-2 pb-2.5 border-b border-slate-100 mb-3">
