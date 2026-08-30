@@ -40,6 +40,8 @@ export const GameView: React.FC<GameViewProps> = ({
   const [timeLeft, setTimeLeft] = useState<number>(maxTurnDuration);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const isSubmittingRef = useRef<boolean>(false);
+  const isComposingRef = useRef<boolean>(false);
 
   // Active player identification
   const activePlayer = room.currentPlayers[room.currentTurnIndex];
@@ -153,54 +155,81 @@ export const GameView: React.FC<GameViewProps> = ({
     };
   }, [room.currentTurnIndex, activePlayer?.id, currentChainLength, maxTurnDuration]);
 
-  // Handle word submission
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!isMyTurn || isSubmitting) return;
+  // Unified immediate word submission logic (Resolves Korean IME Enter & Mobile Double-click issues)
+  const processSubmit = async (wordToSubmit?: string) => {
+    const rawWord = typeof wordToSubmit === 'string' ? wordToSubmit : (inputRef.current?.value || inputText);
+    const trimmed = rawWord.trim();
+    if (!isMyTurn || isSubmittingRef.current || !trimmed) return;
 
-    const trimmed = inputText.trim();
-    if (!trimmed) return;
-
+    isSubmittingRef.current = true;
     setIsSubmitting(true);
     setValidationError(null);
 
-    // 1. Rule & Hangul & Dueum validation
-    const ruleRes = validateWordRules(trimmed, room.lastWord, room.usedWords);
-    if (!ruleRes.valid) {
-      sounds.playWrong();
-      setValidationError(ruleRes.reason || '규칙에 맞지 않는 단어입니다.');
+    try {
+      // 1. Rule & Hangul & Dueum validation
+      const ruleRes = validateWordRules(trimmed, room.lastWord, room.usedWords);
+      if (!ruleRes.valid) {
+        sounds.playWrong();
+        setValidationError(ruleRes.reason || '규칙에 맞지 않는 단어입니다.');
+        return;
+      }
+
+      // 2. Dictionary existence check
+      const dictRes = await checkWordInDictionary(trimmed);
+      if (!dictRes.isValid) {
+        sounds.playWrong();
+        setValidationError('사전에 등재되지 않은 단어입니다.');
+        return;
+      }
+
+      // Success!
+      sounds.playCorrect();
+      onSubmitWord(
+        trimmed,
+        ruleRes.isDueum ?? false,
+        ruleRes.matchedChar ?? trimmed[0],
+        dictRes.wordInfo?.meaning,
+        dictRes.wordInfo?.pos
+      );
+
+      setInputText('');
+      if (inputRef.current) {
+        inputRef.current.value = '';
+      }
+    } finally {
+      isSubmittingRef.current = false;
       setIsSubmitting(false);
-      return;
     }
-
-    // 2. Dictionary existence check
-    const dictRes = await checkWordInDictionary(trimmed);
-    if (!dictRes.isValid) {
-      sounds.playWrong();
-      setValidationError('사전에 등재되지 않은 단어입니다.');
-      setIsSubmitting(false);
-      return;
-    }
-
-    // Success!
-    sounds.playCorrect();
-    onSubmitWord(
-      trimmed,
-      ruleRes.isDueum ?? false,
-      ruleRes.matchedChar ?? trimmed[0],
-      dictRes.wordInfo?.meaning,
-      dictRes.wordInfo?.pos
-    );
-
-    setInputText('');
-    setIsSubmitting(false);
   };
 
-  const handleSendChat = (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!chatInput.trim()) return;
-    onSendMessage(chatInput.trim());
+    processSubmit();
+  };
+
+  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      const currentVal = (e.currentTarget.value || inputText).trim();
+      if (currentVal) {
+        processSubmit(currentVal);
+      }
+    }
+  };
+
+  const handleSendChat = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const text = chatInput.trim();
+    if (!text) return;
+    onSendMessage(text);
     setChatInput('');
+  };
+
+  const handleChatKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendChat();
+    }
   };
 
   // Calculate valid starting characters for display
@@ -566,6 +595,16 @@ export const GameView: React.FC<GameViewProps> = ({
                     setInputText(e.target.value);
                     if (validationError) setValidationError(null);
                   }}
+                  onKeyDown={handleInputKeyDown}
+                  onCompositionStart={() => {
+                    isComposingRef.current = true;
+                  }}
+                  onCompositionEnd={(e) => {
+                    isComposingRef.current = false;
+                    if (e.currentTarget.value) {
+                      setInputText(e.currentTarget.value);
+                    }
+                  }}
                   disabled={!isMyTurn}
                   placeholder={
                     isMyTurn
@@ -584,6 +623,16 @@ export const GameView: React.FC<GameViewProps> = ({
 
               <button
                 type="submit"
+                onMouseDown={(e) => {
+                  e.preventDefault(); // Keep input focused and avoid mobile virtual keyboard dismiss before click
+                }}
+                onClick={(e) => {
+                  e.preventDefault();
+                  const val = (inputRef.current?.value || inputText).trim();
+                  if (val) {
+                    processSubmit(val);
+                  }
+                }}
                 disabled={!isMyTurn || isSubmitting || !inputText.trim()}
                 className={`px-5 sm:px-8 py-3 sm:py-3.5 rounded-xl font-black text-sm sm:text-base transition-all flex items-center gap-1.5 sm:gap-2 cursor-pointer shrink-0 ${
                   isMyTurn && inputText.trim()
@@ -684,11 +733,13 @@ export const GameView: React.FC<GameViewProps> = ({
                 type="text"
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
+                onKeyDown={handleChatKeyDown}
                 placeholder="채팅..."
                 className="flex-1 px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 focus:outline-none focus:ring-1 focus:ring-purple-500"
               />
               <button
                 type="submit"
+                onMouseDown={(e) => e.preventDefault()}
                 className="p-1.5 bg-[#1e2022] text-white rounded-lg hover:bg-black transition-colors"
               >
                 <Send className="w-3 h-3" />

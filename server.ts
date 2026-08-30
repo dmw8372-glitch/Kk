@@ -674,21 +674,19 @@ app.get('/api/dict/search', async (req, res) => {
     let apiItems: any[] = [];
     const seenIds = new Set<string>();
 
-    // 1. 국립국어원 표준국어대사전 - exact 검색 및 start/include 검색 병합
+    // 1. 국립국어원 표준국어대사전 실시간 검색 (표준 검색 + exact/start 다각도 조회)
     try {
-      // 1-1. exact 일치 검색 시도 (모든 동음이의어 포함)
-      const stdictExactUrl = `https://stdict.korean.go.kr/api/search.do?key=${encodeURIComponent(
+      // 1-1. 표준 검색 (수산화^나트륨 같은 복합어/전문어/화학명 포함)
+      const stdictStandardUrl = `https://stdict.korean.go.kr/api/search.do?key=${encodeURIComponent(
         apiKey
-      )}&q=${encodeURIComponent(
-        word
-      )}&req_type=json&advanced=y&method=exact&type1=word&num=30`;
+      )}&q=${encodeURIComponent(word)}&req_type=json&num=30`;
 
-      const exactRes = await fetch(stdictExactUrl, {
+      const stdRes = await fetch(stdictStandardUrl, {
         headers: { Accept: 'application/json' },
       });
 
-      if (exactRes.ok) {
-        const text = await exactRes.text();
+      if (stdRes.ok) {
+        const text = await stdRes.text();
         try {
           const data = JSON.parse(text);
           if (data?.channel?.item && Array.isArray(data.channel.item)) {
@@ -701,12 +699,39 @@ app.get('/api/dict/search', async (req, res) => {
         }
       }
 
-      // 1-2. start 시작 검색 시도 (파생어, 합성어, 관련어 포함: 예 '간섭' -> '간섭하다', '간섭계' 등)
+      // 1-2. exact 일치 검색 시도 (advanced)
+      if (apiItems.length === 0) {
+        const stdictExactUrl = `https://stdict.korean.go.kr/api/search.do?key=${encodeURIComponent(
+          apiKey
+        )}&q=${encodeURIComponent(
+          word
+        )}&req_type=json&advanced=y&method=exact&num=30`;
+
+        const exactRes = await fetch(stdictExactUrl, {
+          headers: { Accept: 'application/json' },
+        });
+
+        if (exactRes.ok) {
+          const text = await exactRes.text();
+          try {
+            const data = JSON.parse(text);
+            if (data?.channel?.item && Array.isArray(data.channel.item)) {
+              apiItems.push(...data.channel.item);
+            } else if (data?.channel?.item && typeof data.channel.item === 'object') {
+              apiItems.push(data.channel.item);
+            }
+          } catch {
+            // parse fallback
+          }
+        }
+      }
+
+      // 1-3. start 시작 검색 시도
       const stdictStartUrl = `https://stdict.korean.go.kr/api/search.do?key=${encodeURIComponent(
         apiKey
       )}&q=${encodeURIComponent(
         word
-      )}&req_type=json&advanced=y&method=start&type1=word&num=30`;
+      )}&req_type=json&advanced=y&method=start&num=30`;
 
       const startRes = await fetch(stdictStartUrl, {
         headers: { Accept: 'application/json' },
@@ -741,7 +766,7 @@ app.get('/api/dict/search', async (req, res) => {
       try {
         const opendictUrl = `https://opendict.korean.go.kr/api/search?key=${encodeURIComponent(
           apiKey
-        )}&q=${encodeURIComponent(word)}&req_type=json&advanced=y&method=exact&type1=word&num=20`;
+        )}&q=${encodeURIComponent(word)}&req_type=json&num=20`;
         const openRes = await fetch(opendictUrl, {
           headers: { Accept: 'application/json' },
         });
@@ -771,7 +796,7 @@ app.get('/api/dict/search', async (req, res) => {
           if (!cleanWord) return null;
 
           const supNo = it.sup_no ? String(it.sup_no) : '';
-          const itPos = it.pos || '명사';
+          const itPos = it.pos && it.pos !== '품사 없음' ? it.pos : '명사';
           let itOrigin = it.origin || '';
 
           const itemSenses: Array<{
@@ -864,19 +889,80 @@ app.get('/api/dict/search', async (req, res) => {
       }
     }
 
-    // 4. 위키낱말사전 fallback (정규 표제어 문서 존재 여부 정밀 검증)
+    // 4. 한국어 위키백과 & 위키낱말사전 fallback (리다이렉트 및 복합어 지원)
     try {
-      const wiktionaryUrl = `https://ko.wiktionary.org/w/api.php?action=query&prop=extracts&exintro=true&explaintext=true&titles=${encodeURIComponent(
+      // 4-1. 한국어 위키백과 조회 (과학/화학/지리/역사 표제어 완벽 지원)
+      const wikiUrl = `https://ko.wikipedia.org/w/api.php?action=query&prop=extracts&exintro=true&explaintext=true&titles=${encodeURIComponent(
         word
-      )}&format=json&origin=*`;
+      )}&redirects=1&format=json`;
 
-      const wikiRes = await fetch(wiktionaryUrl, {
+      const wikiRes = await fetch(wikiUrl, {
         headers: { 'User-Agent': 'KkeutitgiBot/1.0 (Korean Word Chain Game)' },
       });
 
       if (wikiRes.ok) {
         const wikiData = (await wikiRes.json()) as any;
         const pages = wikiData?.query?.pages || {};
+        const pageId = Object.keys(pages)[0];
+
+        if (pageId && pageId !== '-1') {
+          const pageTitle = cleanDictWord(pages[pageId]?.title || word);
+          const rawExtract = pages[pageId]?.extract || '';
+          if (rawExtract.trim().length > 0) {
+            let cleanMeaning = rawExtract
+              .replace(/==.*?==/g, '')
+              .replace(/\[\[.*?\]\]/g, '')
+              .replace(/\n+/g, ' ')
+              .trim();
+
+            if (cleanMeaning.length > 250) {
+              cleanMeaning = cleanMeaning.slice(0, 250) + '...';
+            }
+
+            const matchedWord = pageTitle || word;
+            return res.json({
+              found: true,
+              items: [
+                {
+                  id: `${matchedWord}-wikipedia`,
+                  word: matchedWord,
+                  pos: '명사',
+                  meaning: cleanMeaning,
+                  definitions: [cleanMeaning],
+                  senses: [
+                    {
+                      senseNo: 1,
+                      definition: cleanMeaning,
+                      pos: '명사',
+                      origin: '한국어 표준 백과',
+                    },
+                  ],
+                  length: matchedWord.length,
+                  firstChar: matchedWord[0],
+                  lastChar: matchedWord[matchedWord.length - 1],
+                  origin: '한국어 표제어',
+                  source: 'WIKTIONARY',
+                },
+              ],
+              source: 'WIKTIONARY',
+              attribution: '한국어 표준 백과사전 (CC-BY-SA 4.0)',
+            });
+          }
+        }
+      }
+
+      // 4-2. 위키낱말사전 조회
+      const wiktionaryUrl = `https://ko.wiktionary.org/w/api.php?action=query&prop=extracts&exintro=true&explaintext=true&titles=${encodeURIComponent(
+        word
+      )}&redirects=1&format=json&origin=*`;
+
+      const wiktionaryRes = await fetch(wiktionaryUrl, {
+        headers: { 'User-Agent': 'KkeutitgiBot/1.0 (Korean Word Chain Game)' },
+      });
+
+      if (wiktionaryRes.ok) {
+        const wiktData = (await wiktionaryRes.json()) as any;
+        const pages = wiktData?.query?.pages || {};
         const pageId = Object.keys(pages)[0];
 
         if (pageId && pageId !== '-1') {
@@ -896,7 +982,7 @@ app.get('/api/dict/search', async (req, res) => {
             const senses = definitions.map((d, i) => ({
               senseNo: i + 1,
               definition: d.replace(/^[0-9]+[.)]\s*/, ''),
-              pos: extract.includes('명사') ? '명사' : '표준어',
+              pos: '명사',
               origin: '표준어',
             }));
 
@@ -906,7 +992,7 @@ app.get('/api/dict/search', async (req, res) => {
                 {
                   id: `${word}-wiki`,
                   word,
-                  pos: extract.includes('명사') ? '명사' : '표준어',
+                  pos: '명사',
                   meaning: senses[0]?.definition || cleanMeaning,
                   definitions,
                   senses,
@@ -918,13 +1004,13 @@ app.get('/api/dict/search', async (req, res) => {
                 },
               ],
               source: 'WIKTIONARY',
-              attribution: '한국어 사전 정보',
+              attribution: '한국어 사전 정보 (CC-BY-SA 4.0)',
             });
           }
         }
       }
     } catch (wikiErr) {
-      console.error('Wiktionary fallback error:', wikiErr);
+      console.error('Wiki fallback error:', wikiErr);
     }
 
     // 일치하는 사전 표제어가 없을 경우 미등재 단어로 거부

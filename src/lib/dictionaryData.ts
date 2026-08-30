@@ -179,11 +179,12 @@ async function fetchClientSideDictionaryFallback(
   const clean = cleanDictWord(word);
   if (!clean) return { found: false, items: [] };
 
-  // 1. 위키낱말사전 (브라우저 CORS 완전 지원)
+  // 1. 한국어 위키백과 & 위키낱말사전 (브라우저 CORS 완전 지원)
   try {
-    const wikiUrl = `https://ko.wiktionary.org/w/api.php?action=query&prop=extracts&exintro=true&explaintext=true&titles=${encodeURIComponent(
+    // 1-1. 한국어 위키백과 (표제어 리다이렉트 지원)
+    const wikiUrl = `https://ko.wikipedia.org/w/api.php?action=query&prop=extracts&exintro=true&explaintext=true&titles=${encodeURIComponent(
       clean
-    )}&format=json&origin=*`;
+    )}&redirects=1&format=json&origin=*`;
 
     const wikiRes = await fetch(wikiUrl, { signal });
     if (wikiRes.ok) {
@@ -193,11 +194,63 @@ async function fetchClientSideDictionaryFallback(
 
       if (pageKey && pageKey !== '-1') {
         const page = pages[pageKey];
+        const pageTitle = cleanDictWord(page.title || clean);
+        const rawExtract = String(page.extract || '').trim();
+        if (rawExtract) {
+          const cleanDef = rawExtract.replace(/\n+/g, ' ').slice(0, 300);
+          const wordItem: DictionaryWord = {
+            id: `wiki-${pageTitle || clean}`,
+            word: pageTitle || clean,
+            pos: '명사',
+            meaning: cleanDef || `${clean}: 표준 한국어 표제어입니다.`,
+            definitions: [cleanDef || `${clean}: 표준 한국어 표제어입니다.`],
+            senses: [
+              {
+                senseNo: 1,
+                definition: cleanDef || `${clean}: 표준 한국어 표제어입니다.`,
+                pos: '명사',
+                origin: '한국어 표준어',
+              },
+            ],
+            length: (pageTitle || clean).length,
+            firstChar: (pageTitle || clean)[0],
+            lastChar: (pageTitle || clean)[(pageTitle || clean).length - 1],
+            origin: '한국어 표제어',
+            source: 'WIKTIONARY',
+          };
+
+          REAL_API_WORD_CACHE.set(clean, wordItem);
+          return {
+            found: true,
+            items: [wordItem],
+            attribution: '한국어 백과사전 (CC-BY-SA 4.0)',
+          };
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  try {
+    // 1-2. 위키낱말사전
+    const wiktUrl = `https://ko.wiktionary.org/w/api.php?action=query&prop=extracts&exintro=true&explaintext=true&titles=${encodeURIComponent(
+      clean
+    )}&redirects=1&format=json&origin=*`;
+
+    const wiktRes = await fetch(wiktUrl, { signal });
+    if (wiktRes.ok) {
+      const wiktData = await wiktRes.json();
+      const pages = wiktData?.query?.pages || {};
+      const pageKey = Object.keys(pages)[0];
+
+      if (pageKey && pageKey !== '-1') {
+        const page = pages[pageKey];
         const rawExtract = String(page.extract || '').trim();
         const cleanDef = rawExtract.replace(/\n+/g, ' ').slice(0, 300);
 
         const wordItem: DictionaryWord = {
-          id: `wiki-${clean}`,
+          id: `wikt-${clean}`,
           word: clean,
           pos: '명사',
           meaning: cleanDef || `${clean}: 국어사전에 등재된 표준어입니다.`,
