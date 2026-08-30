@@ -222,7 +222,16 @@ const CopyrightPolicyDoc: React.FC = () => (
     </section>
 
     <section className="space-y-2">
-      <h2 className="font-bold text-neutral-900">제5조 (권리 침해 신고 및 조치)</h2>
+      <h2 className="font-bold text-neutral-900">제5조 (배경음악 및 효과음 음원 라이선스 및 저작권 정책)</h2>
+      <ol className="list-decimal list-inside space-y-1 text-neutral-700 pl-1">
+        <li>본 서비스에서 재생되는 배경음악(BGM) 및 효과음(SFX)은 Web Audio API 기반 오리지널 실시간 신디사이저 알고리즘 합성음 및 완전 저작권 소멸 퍼블릭 도메인(Public Domain / CC0 1.0 Universal) 라이선스 기준을 준수하는 순수 무료·로열티 프리(Royalty-Free) 음원입니다.</li>
+        <li>본 음원은 외부 저작권 침해 우려가 일체 없도록 서비스 자체 사운드 엔진으로 제작되었으며, 이용자는 개인 방송, 실시간 스트리밍(유튜브, 치지직, 트위치, 아프리카TV 등), 영상 녹화 및 게임 플레이 중 자유롭게 배경음악과 효과음을 청취 및 송출할 수 있습니다.</li>
+        <li>음원 라이선스 출처: 끝잇기 내장 오리지널 Web Audio Sound Engine (CC0 1.0 Universal / Royalty-Free).</li>
+      </ol>
+    </section>
+
+    <section className="space-y-2">
+      <h2 className="font-bold text-neutral-900">제6조 (권리 침해 신고 및 조치)</h2>
       <p className="text-neutral-700">
         서비스 내 콘텐츠가 타인의 저작권을 침해하는 경우, 권리자는 정당한 권리 증명 서류를 첨부하여 운영자에게 통보할 수 있으며, 서비스는 검토 후 즉시 해당 콘텐츠의 수정 또는 삭제 조치를 취합니다.
       </p>

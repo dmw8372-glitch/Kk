@@ -341,7 +341,7 @@ export const GameRoomsView: React.FC<GameRoomsViewProps> = ({
                   <span>공식 게임 규칙 적용</span>
                 </div>
                 <ul className="text-[11px] text-slate-600 font-medium space-y-1 list-disc list-inside">
-                  <li>타임어택 룰: <strong>15.0초 시작 → 턴마다 -0.2초 (최저 5.0초)</strong></li>
+                  <li>타임어택 룰: <strong>15.0초 시작 → 턴마다 -0.4초 (최저 5.0초)</strong></li>
                   <li>국립국어원 표준국어대사전 실시간 검증</li>
                   <li>두음법칙 공식 허용 (리→이, 녀→여, 류→유 등)</li>
                 </ul>

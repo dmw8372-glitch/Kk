@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Bell, HelpCircle, Volume2, VolumeX, User, ChevronDown, Sparkles, Check, RefreshCw } from 'lucide-react';
+import { Bell, HelpCircle, Volume2, VolumeX, User, ChevronDown, Sparkles, Check, RefreshCw, Music } from 'lucide-react';
 import { UserStats } from '../types';
 import { sounds } from '../lib/soundEffects';
 
@@ -24,6 +24,7 @@ export const Header: React.FC<HeaderProps> = ({
   const [editNickname, setEditNickname] = useState(userStats.nickname);
   const [selectedColor, setSelectedColor] = useState(userStats.avatarColor);
   const [isMuted, setIsMuted] = useState(sounds.getIsMuted());
+  const [isBgmEnabled, setIsBgmEnabled] = useState(sounds.getIsBgmEnabled());
 
   const navItems = [
     { id: 'HOME', label: '홈' },
@@ -37,6 +38,11 @@ export const Header: React.FC<HeaderProps> = ({
     sounds.setMuted(next);
     setIsMuted(next);
     if (!next) sounds.playPop();
+  };
+
+  const handleToggleBgm = () => {
+    const next = sounds.toggleBGM();
+    setIsBgmEnabled(next);
   };
 
   const handleSaveProfile = () => {
@@ -104,12 +110,25 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         {/* Right Controls */}
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          {/* BGM Music Toggle */}
+          <button
+            onClick={handleToggleBgm}
+            className={`p-2 rounded-full transition-colors ${
+              isBgmEnabled
+                ? 'text-purple-600 hover:bg-purple-50'
+                : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'
+            }`}
+            title={isBgmEnabled ? '배경음악(BGM) 끄기' : '배경음악(BGM) 켜기'}
+          >
+            <Music className={`w-5 h-5 ${isBgmEnabled ? 'text-purple-600' : 'text-slate-400'}`} />
+          </button>
+
           {/* Sound Toggle */}
           <button
             onClick={handleToggleMute}
             className="p-2 text-slate-500 hover:text-[#1e2022] hover:bg-slate-100 rounded-full transition-colors"
-            title={isMuted ? '음소거 해제' : '음소거'}
+            title={isMuted ? '효과음 켜기' : '효과음 끄기'}
           >
             {isMuted ? <VolumeX className="w-5 h-5 text-rose-500" /> : <Volume2 className="w-5 h-5" />}
           </button>

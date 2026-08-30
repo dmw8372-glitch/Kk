@@ -290,6 +290,39 @@ export function App() {
     localStorage.setItem('kkeutitgi_user_stats', JSON.stringify(userStats));
   }, [userStats]);
 
+  // Background Music (BGM) & Audio Context unlock on first user gesture
+  useEffect(() => {
+    const handleFirstGesture = () => {
+      if (activeRoom?.status === 'PLAYING') {
+        sounds.startBGM('game');
+      } else {
+        sounds.startBGM('lobby');
+      }
+      window.removeEventListener('click', handleFirstGesture);
+      window.removeEventListener('keydown', handleFirstGesture);
+      window.removeEventListener('touchstart', handleFirstGesture);
+    };
+
+    window.addEventListener('click', handleFirstGesture, { once: true });
+    window.addEventListener('keydown', handleFirstGesture, { once: true });
+    window.addEventListener('touchstart', handleFirstGesture, { once: true });
+
+    return () => {
+      window.removeEventListener('click', handleFirstGesture);
+      window.removeEventListener('keydown', handleFirstGesture);
+      window.removeEventListener('touchstart', handleFirstGesture);
+    };
+  }, []);
+
+  // Switch BGM mode when room status changes (lobby vs playing)
+  useEffect(() => {
+    if (activeRoom?.status === 'PLAYING') {
+      sounds.startBGM('game');
+    } else {
+      sounds.startBGM('lobby');
+    }
+  }, [activeRoom?.status]);
+
   // Check URL params for ?room=XXXXXX (e.g. from share link)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -554,7 +587,7 @@ export function App() {
 
             const newUsed = [...prev.usedWords, newItem.word];
             const newChain = [...prev.wordChain, newItem];
-            const newDuration = Math.max(5.0, Number((15.0 - newChain.length * 0.2).toFixed(1)));
+            const newDuration = Math.max(5.0, Number((15.0 - newChain.length * 0.4).toFixed(1)));
 
             const updatedPlayers = prev.currentPlayers.map((p) => {
               if (p.id === newItem.playerId) {
@@ -1100,7 +1133,7 @@ export function App() {
     return next;
   };
 
-  // Submit Word (Starts at 15.0s, decreases by 0.2s per word to min 5.0s)
+  // Submit Word (Starts at 15.0s, decreases by 0.4s per word to min 5.0s)
   const handleSubmitWord = (
     word: string,
     isDueum: boolean,
@@ -1140,7 +1173,7 @@ export function App() {
 
     const nextIndex = getNextAliveTurnIndex(updatedPlayers, activeRoom.currentTurnIndex);
     const newWordChain = [...activeRoom.wordChain, newChainItem];
-    const newTurnDuration = Math.max(5.0, Number((15.0 - newWordChain.length * 0.2).toFixed(1)));
+    const newTurnDuration = Math.max(5.0, Number((15.0 - newWordChain.length * 0.4).toFixed(1)));
 
     const updatedRoom: GameRoom = {
       ...activeRoom,
@@ -1194,7 +1227,7 @@ export function App() {
 
     const penaltyPoints = 100;
     const currentChainLength = activeRoom.wordChain ? activeRoom.wordChain.length : 0;
-    const currentTurnDuration = Math.max(5.0, Number((15.0 - currentChainLength * 0.2).toFixed(1)));
+    const currentTurnDuration = Math.max(5.0, Number((15.0 - currentChainLength * 0.4).toFixed(1)));
 
     // Score deduction for loser (-100점)
     const updatedPlayers = activeRoom.currentPlayers.map((p) => {

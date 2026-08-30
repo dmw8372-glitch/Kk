@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Send, MessageCircle, AlertCircle, CheckCircle2, XCircle, BookOpen, Volume2, VolumeX, ShieldAlert, Sparkles, LogOut } from 'lucide-react';
+import { Send, MessageCircle, AlertCircle, CheckCircle2, XCircle, BookOpen, Volume2, VolumeX, ShieldAlert, Sparkles, LogOut, Music } from 'lucide-react';
 import { GameRoom, Player, ChatMessage, WordChainItem } from '../types';
 import { MascotAvatar } from './MascotAvatar';
 import { validateWordRules, getValidStartingChars } from '../lib/hangulRules';
@@ -32,9 +32,9 @@ export const GameView: React.FC<GameViewProps> = ({
   const [chatOpen, setChatOpen] = useState(false);
   const [chatInput, setChatInput] = useState('');
 
-  // Dynamic Turn Duration: Starts at 15.0s, reduces by 0.2s per word in chain, min 5.0s
+  // Dynamic Turn Duration: Starts at 15.0s, reduces by 0.4s per word in chain, min 5.0s
   const currentChainLength = room.wordChain ? room.wordChain.length : 0;
-  const maxTurnDuration = Math.max(5.0, Number((15.0 - currentChainLength * 0.2).toFixed(1)));
+  const maxTurnDuration = Math.max(5.0, Number((15.0 - currentChainLength * 0.4).toFixed(1)));
 
   // Countdown timer state
   const [timeLeft, setTimeLeft] = useState<number>(maxTurnDuration);
@@ -44,6 +44,11 @@ export const GameView: React.FC<GameViewProps> = ({
   // Active player identification
   const activePlayer = room.currentPlayers[room.currentTurnIndex];
   const isMyTurn = activePlayer?.id === currentPlayerId && activePlayer?.isAlive;
+
+  // Start game BGM on mount
+  useEffect(() => {
+    sounds.startBGM('game');
+  }, []);
 
   // Auto focus input on my turn
   useEffect(() => {
@@ -114,7 +119,7 @@ export const GameView: React.FC<GameViewProps> = ({
     return () => clearTimeout(botTimer);
   }, [room.currentTurnIndex, activePlayer?.id, room.hostId, currentPlayerId, maxTurnDuration]);
 
-  // Turn Countdown Timer (Dynamic 15.0s -> 5.0s with 0.2s decrement per turn)
+  // Turn Countdown Timer (Dynamic 15.0s -> 5.0s with 0.4s decrement per turn)
   useEffect(() => {
     setTimeLeft(maxTurnDuration);
     setValidationError(null);
@@ -244,13 +249,19 @@ export const GameView: React.FC<GameViewProps> = ({
   // Last word item definition for sidebar
   const lastWordItem = room.wordChain[room.wordChain.length - 1];
 
-  // In-game sound state
-  const [isSoundMuted, setIsSoundMuted] = useState(false);
+  // In-game sound & BGM state
+  const [isSoundMuted, setIsSoundMuted] = useState(sounds.getIsMuted());
+  const [isBgmOn, setIsBgmOn] = useState(sounds.getIsBgmEnabled());
 
   const toggleSound = () => {
     const next = !isSoundMuted;
     setIsSoundMuted(next);
     sounds.setMuted(next);
+  };
+
+  const toggleBgm = () => {
+    const next = sounds.toggleBGM();
+    setIsBgmOn(next);
   };
 
   return (
@@ -302,11 +313,25 @@ export const GameView: React.FC<GameViewProps> = ({
             </span>
           </div>
 
+          {/* BGM Music Toggle */}
+          <button
+            onClick={toggleBgm}
+            className={`p-1.5 sm:p-2 rounded-xl transition-colors cursor-pointer flex items-center gap-1 text-xs font-bold ${
+              isBgmOn
+                ? 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                : 'bg-slate-100 text-slate-400 hover:bg-slate-200 line-through'
+            }`}
+            title={isBgmOn ? '배경음악(BGM) 끄기' : '배경음악(BGM) 켜기'}
+          >
+            <Music className={`w-4 h-4 ${isBgmOn ? 'text-purple-600 animate-bounce' : 'text-slate-400'}`} />
+            <span className="hidden md:inline text-[11px]">BGM</span>
+          </button>
+
           {/* Sound Toggle */}
           <button
             onClick={toggleSound}
             className="p-1.5 sm:p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
-            title={isSoundMuted ? '음소거 해제' : '음소거'}
+            title={isSoundMuted ? '효과음 켜기' : '효과음 음소거'}
           >
             {isSoundMuted ? <VolumeX className="w-4 h-4 text-rose-500" /> : <Volume2 className="w-4 h-4 text-slate-700" />}
           </button>
