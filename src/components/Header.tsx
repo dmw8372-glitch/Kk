@@ -29,7 +29,6 @@ export const Header: React.FC<HeaderProps> = ({
     { id: 'HOME', label: '홈' },
     { id: 'GAME', label: '게임' },
     { id: 'DICT', label: '단어 사전' },
-    { id: 'RANK', label: '랭킹' },
     { id: 'MY', label: '내 기록' },
   ];
 

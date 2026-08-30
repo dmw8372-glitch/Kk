@@ -6,7 +6,6 @@ import { LobbyView } from './components/LobbyView';
 import { GameView } from './components/GameView';
 import { GameRoomsView } from './components/GameRoomsView';
 import { DictionaryView } from './components/DictionaryView';
-import { RankingView } from './components/RankingView';
 import { MyRecordsView } from './components/MyRecordsView';
 import { RulesModal } from './components/RulesModal';
 import { NoticeModal } from './components/NoticeModal';
@@ -1457,8 +1456,6 @@ export function App() {
             />
           ) : currentTab === 'DICT' ? (
             <DictionaryView initialSearch={dictSearchWord} />
-          ) : currentTab === 'RANK' ? (
-            <RankingView userStats={userStats} />
           ) : (
             <MyRecordsView userStats={userStats} onSelectTab={setCurrentTab} />
           )}

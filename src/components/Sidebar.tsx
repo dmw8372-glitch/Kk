@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, Gamepad2, BookOpen, Trophy, Clock, ShieldCheck, Settings } from 'lucide-react';
+import { Home, Gamepad2, BookOpen, Clock, Settings } from 'lucide-react';
 import { UserStats } from '../types';
 import { MascotAvatar } from './MascotAvatar';
 import { sounds } from '../lib/soundEffects';
@@ -19,9 +19,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'HOME', label: '홈', icon: Home },
     { id: 'GAME', label: '게임', icon: Gamepad2 },
     { id: 'DICT', label: '단어 사전', icon: BookOpen },
-    { id: 'RANK', label: '랭킹', icon: Trophy },
     { id: 'MY', label: '내 기록', icon: Clock },
-    { id: 'ACHIEVE', label: '업적', icon: ShieldCheck },
     { id: 'SETTINGS', label: '설정', icon: Settings },
   ];
 
