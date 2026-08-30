@@ -1377,23 +1377,57 @@ export function App() {
     setCurrentTab('DICT');
   };
 
+  const isPlaying = activeRoom?.status === 'PLAYING';
+
+  // Instant Restart Game
+  const handleRestartGame = () => {
+    setIsGameOverOpen(false);
+    if (!activeRoom) return;
+
+    if (activeRoom.hostId === myPlayerId) {
+      // Host immediately restarts a fresh game!
+      handleStartGame();
+    } else {
+      // Participant resets to lobby with ready state
+      const resetRoom: GameRoom = {
+        ...activeRoom,
+        status: 'WAITING',
+        usedWords: [],
+        wordChain: [],
+        round: 1,
+        currentPlayers: activeRoom.currentPlayers.map((p) => ({
+          ...p,
+          isAlive: true,
+          isReady: true,
+          score: 0,
+          wordsUsed: [],
+        })),
+      };
+      setActiveRoom(resetRoom);
+      saveRoomToServer(resetRoom);
+      broadcastRoomEvent('SYNC_ROOM', { room: resetRoom });
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#f8f9fc] text-[#1e2022] flex flex-col font-sans selection:bg-purple-200">
-      {/* Top Navigation Header */}
-      <Header
-        currentTab={currentTab}
-        onSelectTab={(tab) => {
-          sounds.playPop();
-          setCurrentTab(tab);
-        }}
-        userStats={userStats}
-        onUpdateUserStats={(updated) => setUserStats((prev) => ({ ...prev, ...updated }))}
-        onOpenRules={() => setIsRulesOpen(true)}
-        onOpenNotices={() => setIsNoticeOpen(true)}
-      />
+      {/* Top Navigation Header (Hidden during active gameplay for zero distraction as requested) */}
+      {!isPlaying && (
+        <Header
+          currentTab={currentTab}
+          onSelectTab={(tab) => {
+            sounds.playPop();
+            setCurrentTab(tab);
+          }}
+          userStats={userStats}
+          onUpdateUserStats={(updated) => setUserStats((prev) => ({ ...prev, ...updated }))}
+          onOpenRules={() => setIsRulesOpen(true)}
+          onOpenNotices={() => setIsNoticeOpen(true)}
+        />
+      )}
 
       {/* Main Container Layout */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 flex flex-col lg:flex-row gap-6">
+      <main className={`flex-1 max-w-7xl w-full mx-auto flex flex-col lg:flex-row ${isPlaying ? 'p-2 sm:p-4' : 'px-4 sm:px-6 py-6 gap-6'}`}>
         {/* Left Sidebar (Only visible when not in an active room) */}
         {!activeRoom && (
           <Sidebar
@@ -1578,6 +1612,7 @@ export function App() {
         <ResultModal
           room={activeRoom}
           currentPlayerId={myPlayerId}
+          onRestartGame={handleRestartGame}
           onReturnToLobby={() => {
             setIsGameOverOpen(false);
             const resetRoom: GameRoom = {

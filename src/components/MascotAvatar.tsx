@@ -8,7 +8,7 @@ interface MascotAvatarProps {
   isHost?: boolean;
   isAlive?: boolean;
   isActiveTurn?: boolean;
-  expression?: 'happy' | 'smile' | 'shock' | 'dead' | 'wink';
+  expression?: 'happy' | 'smile' | 'shock' | 'dead' | 'wink' | 'sleeping';
   accessory?: string;
   className?: string;
 }
@@ -43,10 +43,71 @@ export const MascotAvatar: React.FC<MascotAvatarProps> = ({
   const currentTheme = isAlive ? (COLOR_MAP[color] || COLOR_MAP.yellow) : COLOR_MAP.gray;
   const currentSize = SIZE_MAP[size] || SIZE_MAP.md;
 
+  const isSleeping = !isAlive || expression === 'sleeping';
+
   return (
     <div className={`relative inline-flex items-center justify-center select-none ${className}`}>
+      {/* Sleeping Zzz Floating Animation */}
+      {isSleeping && (
+        <div className="absolute -top-6 -right-2 pointer-events-none z-30 flex flex-col items-start">
+          <motion.span
+            initial={{ opacity: 0, y: 4, x: -2, scale: 0.7 }}
+            animate={{
+              opacity: [0, 1, 0],
+              y: [-2, -16, -24],
+              x: [0, 6, 12],
+              scale: [0.7, 1.1, 0.9],
+            }}
+            transition={{
+              duration: 2.2,
+              repeat: Infinity,
+              ease: 'easeInOut',
+            }}
+            className="text-[11px] font-black text-indigo-500/90 drop-shadow-xs"
+          >
+            Z
+          </motion.span>
+          <motion.span
+            initial={{ opacity: 0, y: 4, x: 0, scale: 0.6 }}
+            animate={{
+              opacity: [0, 0.9, 0],
+              y: [0, -12, -18],
+              x: [-2, 3, 7],
+              scale: [0.6, 0.9, 0.7],
+            }}
+            transition={{
+              duration: 2.2,
+              delay: 0.7,
+              repeat: Infinity,
+              ease: 'easeInOut',
+            }}
+            className="text-[9px] font-black text-purple-400/90 -mt-1 ml-2"
+          >
+            z
+          </motion.span>
+          <motion.span
+            initial={{ opacity: 0, y: 4, x: 2, scale: 0.5 }}
+            animate={{
+              opacity: [0, 0.8, 0],
+              y: [2, -8, -14],
+              x: [0, 2, 4],
+              scale: [0.5, 0.7, 0.5],
+            }}
+            transition={{
+              duration: 2.2,
+              delay: 1.4,
+              repeat: Infinity,
+              ease: 'easeInOut',
+            }}
+            className="text-[8px] font-black text-blue-400/90 -mt-1 ml-3"
+          >
+            z
+          </motion.span>
+        </div>
+      )}
+
       {/* Active Turn Pulsing Aura */}
-      {isActiveTurn && isAlive && (
+      {isActiveTurn && isAlive && !isSleeping && (
         <motion.div
           animate={{ scale: [1, 1.15, 1], opacity: [0.7, 0.3, 0.7] }}
           transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
@@ -69,14 +130,19 @@ export const MascotAvatar: React.FC<MascotAvatarProps> = ({
       {/* Character Body (Squishy rounded shape) */}
       <motion.div
         animate={
-          !isAlive
-            ? { y: 2, rotate: -3, filter: 'grayscale(0.8) opacity(0.6)' }
+          isSleeping
+            ? {
+                y: [1, 3, 1],
+                rotate: [-8, -12, -8],
+                scale: [1, 0.97, 1],
+                filter: 'opacity(0.85)',
+              }
             : isActiveTurn
             ? { y: [0, -6, 0], scale: [1, 1.04, 1] }
             : { y: [0, -2, 0] }
         }
         transition={{
-          duration: isActiveTurn ? 0.8 : 2.5,
+          duration: isSleeping ? 2.4 : isActiveTurn ? 0.8 : 2.5,
           repeat: Infinity,
           ease: 'easeInOut',
         }}
@@ -89,10 +155,11 @@ export const MascotAvatar: React.FC<MascotAvatarProps> = ({
         <div className={`relative flex flex-col items-center justify-center ${currentSize.face}`}>
           {/* Eyes */}
           <div className="flex items-center gap-2.5 mb-0.5">
-            {!isAlive ? (
+            {isSleeping ? (
+              // Sleeping closed peaceful eyes (u u / curved arches)
               <>
-                <span className="text-slate-600 font-black text-xs">✕</span>
-                <span className="text-slate-600 font-black text-xs">✕</span>
+                <div className="w-2.5 h-1.5 border-b-2 border-slate-600 rounded-full" />
+                <div className="w-2.5 h-1.5 border-b-2 border-slate-600 rounded-full" />
               </>
             ) : expression === 'dead' ? (
               <>
@@ -117,16 +184,19 @@ export const MascotAvatar: React.FC<MascotAvatarProps> = ({
             )}
           </div>
 
-          {/* Cheeks Blush (on alive and light colors) */}
-          {isAlive && color !== 'gray' && (
+          {/* Cheeks Blush */}
+          {(isAlive || isSleeping) && color !== 'gray' && (
             <div className="absolute -top-0.5 flex justify-between w-6.5 pointer-events-none">
-              <div className="w-1.5 h-1 rounded-full bg-pink-400/40 blur-[0.5px]" />
-              <div className="w-1.5 h-1 rounded-full bg-pink-400/40 blur-[0.5px]" />
+              <div className="w-1.5 h-1 rounded-full bg-pink-400/50 blur-[0.5px]" />
+              <div className="w-1.5 h-1 rounded-full bg-pink-400/50 blur-[0.5px]" />
             </div>
           )}
 
           {/* Mouth */}
-          {isAlive ? (
+          {isSleeping ? (
+            // Small sleeping cute 'o' mouth (breathing)
+            <div className="w-1.5 h-1.5 rounded-full bg-slate-600/70 mt-0.5 animate-pulse" />
+          ) : isAlive ? (
             <div className="w-2.5 h-1 border-b-2 border-[#1e2022] rounded-full mt-0.5" />
           ) : (
             <div className="w-2 h-0.5 bg-slate-600 rounded-full mt-0.5" />
