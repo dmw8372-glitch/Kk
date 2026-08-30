@@ -652,9 +652,18 @@ app.post('/api/rooms/leave', (req, res) => {
   res.json({ success: true });
 });
 
+// Helper to clean Korean dictionary headwords (removes -, --, _, ^, ㆍ, ~, spaces, numbers)
+function cleanDictWord(rawWord: string): string {
+  if (!rawWord) return '';
+  return String(rawWord)
+    .replace(/[0-9\-^_ㆍ~^ \t]/g, '')
+    .trim();
+}
+
 // API: 국립국어원 표준국어대사전 Open API 실시간 단어 검색 & 검증 (동음이의어 및 다중 뜻풀이 전체 반환)
 app.get('/api/dict/search', async (req, res) => {
-  const word = String(req.query.q || '').trim();
+  const rawQuery = String(req.query.q || '').trim();
+  const word = cleanDictWord(rawQuery);
   const apiKey = DEFAULT_STDICT_API_KEY;
 
   if (!word) {
@@ -662,151 +671,72 @@ app.get('/api/dict/search', async (req, res) => {
   }
 
   try {
-    // 1. 국립국어원 표준국어대사전 Open API - 상세 검색 (동음이의어 모두 포함하여 최대 30개 조회)
     let apiItems: any[] = [];
-    
-    // exact 일치 검색 시도 (배¹, 배², 배³ 등 모든 동음이의어 항목 포함)
+    const seenIds = new Set<string>();
+
+    // 1. 국립국어원 표준국어대사전 - exact 검색 및 start/include 검색 병합
     try {
+      // 1-1. exact 일치 검색 시도 (모든 동음이의어 포함)
       const stdictExactUrl = `https://stdict.korean.go.kr/api/search.do?key=${encodeURIComponent(
         apiKey
       )}&q=${encodeURIComponent(
         word
       )}&req_type=json&advanced=y&method=exact&type1=word&num=30`;
 
-      const response = await fetch(stdictExactUrl, {
+      const exactRes = await fetch(stdictExactUrl, {
         headers: { Accept: 'application/json' },
       });
 
-      if (response.ok) {
-        const text = await response.text();
+      if (exactRes.ok) {
+        const text = await exactRes.text();
         try {
           const data = JSON.parse(text);
           if (data?.channel?.item && Array.isArray(data.channel.item)) {
-            apiItems = data.channel.item;
+            apiItems.push(...data.channel.item);
           } else if (data?.channel?.item && typeof data.channel.item === 'object') {
-            apiItems = [data.channel.item];
+            apiItems.push(data.channel.item);
           }
         } catch {
-          console.warn('STDict exact search parse fallback');
+          // parse fallback
+        }
+      }
+
+      // 1-2. start 시작 검색 시도 (파생어, 합성어, 관련어 포함: 예 '간섭' -> '간섭하다', '간섭계' 등)
+      const stdictStartUrl = `https://stdict.korean.go.kr/api/search.do?key=${encodeURIComponent(
+        apiKey
+      )}&q=${encodeURIComponent(
+        word
+      )}&req_type=json&advanced=y&method=start&type1=word&num=30`;
+
+      const startRes = await fetch(stdictStartUrl, {
+        headers: { Accept: 'application/json' },
+      });
+
+      if (startRes.ok) {
+        const startText = await startRes.text();
+        try {
+          const startData = JSON.parse(startText);
+          const startItems = Array.isArray(startData?.channel?.item)
+            ? startData.channel.item
+            : startData?.channel?.item && typeof startData.channel.item === 'object'
+            ? [startData.channel.item]
+            : [];
+          
+          for (const item of startItems) {
+            const code = item.target_code || item.word;
+            if (!apiItems.some((ex) => (ex.target_code || ex.word) === code)) {
+              apiItems.push(item);
+            }
+          }
+        } catch {
+          // ignore
         }
       }
     } catch (e) {
-      console.error('STDict exact fetch error:', e);
+      console.error('STDict fetch error:', e);
     }
 
-    // 만약 일치 검색 결과가 적거나 없으면 시작/일반 검색으로 추가 확보
-    if (apiItems.length === 0) {
-      try {
-        const fallbackUrl = `https://stdict.korean.go.kr/api/search.do?key=${encodeURIComponent(
-          apiKey
-        )}&q=${encodeURIComponent(word)}&req_type=json&advanced=y&method=start&type1=word&num=30`;
-
-        const fbRes = await fetch(fallbackUrl, {
-          headers: { Accept: 'application/json' },
-        });
-
-        if (fbRes.ok) {
-          const fbText = await fbRes.text();
-          try {
-            const fbData = JSON.parse(fbText);
-            if (fbData?.channel?.item && Array.isArray(fbData.channel.item)) {
-              apiItems = fbData.channel.item;
-            } else if (fbData?.channel?.item && typeof fbData.channel.item === 'object') {
-              apiItems = [fbData.channel.item];
-            }
-          } catch {
-            // ignore
-          }
-        }
-      } catch (fbErr) {
-        console.error('STDict start lookup error:', fbErr);
-      }
-    }
-
-    // 2. 국립국어원 결과 매핑 (각 동음이의어 별도 아이템으로 보존 + 각 아이템별 다중 뜻풀이 보존)
-    if (apiItems.length > 0) {
-      const formattedItems = apiItems.map((it: any, index: number) => {
-        const cleanWord = String(it.word || '').replace(/[0-9-^]/g, '').trim();
-        const supNo = it.sup_no ? String(it.sup_no) : '';
-        const itPos = it.pos || '명사';
-        let itOrigin = it.origin || '';
-
-        const itemSenses: Array<{
-          senseNo?: number | string;
-          definition: string;
-          pos?: string;
-          origin?: string;
-          type?: string;
-          link?: string;
-        }> = [];
-
-        if (Array.isArray(it.sense)) {
-          it.sense.forEach((s: any, sIdx: number) => {
-            const def = String(s.definition || '').trim();
-            if (def) {
-              if (!itOrigin && s.origin) itOrigin = s.origin;
-              itemSenses.push({
-                senseNo: s.sense_no || sIdx + 1,
-                definition: def,
-                pos: itPos,
-                origin: s.origin || itOrigin || '표준어',
-                type: s.type || '일반어',
-                link: s.link || `https://stdict.korean.go.kr`,
-              });
-            }
-          });
-        } else if (it.sense && typeof it.sense === 'object') {
-          const def = String(it.sense.definition || '').trim();
-          if (def) {
-            if (!itOrigin && it.sense.origin) itOrigin = it.sense.origin;
-            itemSenses.push({
-              senseNo: it.sense.sense_no || 1,
-              definition: def,
-              pos: itPos,
-              origin: it.sense.origin || itOrigin || '표준어',
-              type: it.sense.type || '일반어',
-              link: it.sense.link || `https://stdict.korean.go.kr`,
-            });
-          }
-        }
-
-        const definitions = itemSenses.map((s, sIdx) => `${sIdx + 1}. ${s.definition}`);
-        const primaryMeaning = itemSenses[0]?.definition || '국립국어원 표준국어대사전에 등재된 단어입니다.';
-
-        return {
-          id: `${cleanWord}-${supNo || index}-${it.target_code || index}`,
-          word: cleanWord || word,
-          supNo: supNo,
-          pos: itPos,
-          meaning: primaryMeaning,
-          definitions: definitions.length > 0 ? definitions : [primaryMeaning],
-          senses: itemSenses,
-          length: (cleanWord || word).length,
-          firstChar: (cleanWord || word)[0],
-          lastChar: (cleanWord || word)[(cleanWord || word).length - 1],
-          origin: itOrigin || '표준어',
-          targetCode: it.target_code,
-          source: 'STDICT' as const,
-        };
-      });
-
-      // Filter or sort so exact word matches come first, followed by others
-      formattedItems.sort((a, b) => {
-        if (a.word === word && b.word !== word) return -1;
-        if (b.word === word && a.word !== word) return 1;
-        return 0;
-      });
-
-      return res.json({
-        found: true,
-        items: formattedItems,
-        total: formattedItems.length,
-        source: 'STDICT',
-        attribution: '국립국어원 표준국어대사전 (CCL 2.0 KR)',
-      });
-    }
-
-    // 3. 국립국어원 우리말샘 Open API 추가 검색 (동음이의어 및 표제어 폭넓은 검증)
+    // 2. 국립국어원 우리말샘 Open API 추가 검색 (표준대사전에서 못 찾은 경우)
     if (apiItems.length === 0) {
       try {
         const opendictUrl = `https://opendict.korean.go.kr/api/search?key=${encodeURIComponent(
@@ -820,9 +750,9 @@ app.get('/api/dict/search', async (req, res) => {
           try {
             const openData = JSON.parse(openText);
             if (openData?.channel?.item && Array.isArray(openData.channel.item)) {
-              apiItems = openData.channel.item;
+              apiItems.push(...openData.channel.item);
             } else if (openData?.channel?.item && typeof openData.channel.item === 'object') {
-              apiItems = [openData.channel.item];
+              apiItems.push(openData.channel.item);
             }
           } catch {
             // ignore
@@ -830,6 +760,107 @@ app.get('/api/dict/search', async (req, res) => {
         }
       } catch (openErr) {
         console.error('OpenDict lookup error:', openErr);
+      }
+    }
+
+    // 3. 국립국어원 결과 매핑 및 정규화
+    if (apiItems.length > 0) {
+      const formattedItems = apiItems
+        .map((it: any, index: number) => {
+          const cleanWord = cleanDictWord(it.word || word);
+          if (!cleanWord) return null;
+
+          const supNo = it.sup_no ? String(it.sup_no) : '';
+          const itPos = it.pos || '명사';
+          let itOrigin = it.origin || '';
+
+          const itemSenses: Array<{
+            senseNo?: number | string;
+            definition: string;
+            pos?: string;
+            origin?: string;
+            type?: string;
+            link?: string;
+          }> = [];
+
+          if (Array.isArray(it.sense)) {
+            it.sense.forEach((s: any, sIdx: number) => {
+              const def = String(s.definition || '').trim();
+              if (def) {
+                if (!itOrigin && s.origin) itOrigin = s.origin;
+                itemSenses.push({
+                  senseNo: s.sense_no || sIdx + 1,
+                  definition: def,
+                  pos: itPos,
+                  origin: s.origin || itOrigin || '표준어',
+                  type: s.type || '일반어',
+                  link: s.link || `https://stdict.korean.go.kr`,
+                });
+              }
+            });
+          } else if (it.sense && typeof it.sense === 'object') {
+            const def = String(it.sense.definition || '').trim();
+            if (def) {
+              if (!itOrigin && it.sense.origin) itOrigin = it.sense.origin;
+              itemSenses.push({
+                senseNo: it.sense.sense_no || 1,
+                definition: def,
+                pos: itPos,
+                origin: it.sense.origin || itOrigin || '표준어',
+                type: it.sense.type || '일반어',
+                link: it.sense.link || `https://stdict.korean.go.kr`,
+              });
+            }
+          }
+
+          const definitions = itemSenses.map((s, sIdx) => `${sIdx + 1}. ${s.definition}`);
+          const primaryMeaning = itemSenses[0]?.definition || '국립국어원 표준국어대사전에 등재된 단어입니다.';
+
+          return {
+            id: `${cleanWord}-${supNo || index}-${it.target_code || index}`,
+            word: cleanWord,
+            supNo: supNo,
+            pos: itPos,
+            meaning: primaryMeaning,
+            definitions: definitions.length > 0 ? definitions : [primaryMeaning],
+            senses: itemSenses,
+            length: cleanWord.length,
+            firstChar: cleanWord[0],
+            lastChar: cleanWord[cleanWord.length - 1],
+            origin: itOrigin || '표준어',
+            targetCode: it.target_code,
+            source: 'STDICT' as const,
+          };
+        })
+        .filter(Boolean);
+
+      // Deduplicate by targetCode or (word + supNo + meaning)
+      const uniqueItems: any[] = [];
+      for (const item of formattedItems) {
+        const uniqueKey = item.targetCode ? `tc_${item.targetCode}` : `${item.word}_${item.supNo}_${item.meaning.slice(0, 15)}`;
+        if (!seenIds.has(uniqueKey)) {
+          seenIds.add(uniqueKey);
+          uniqueItems.push(item);
+        }
+      }
+
+      // Sort items: exact matches first, then shorter words, then alphabetical
+      uniqueItems.sort((a, b) => {
+        if (a.word === word && b.word !== word) return -1;
+        if (b.word === word && a.word !== word) return 1;
+        if (a.word.startsWith(word) && !b.word.startsWith(word)) return -1;
+        if (b.word.startsWith(word) && !a.word.startsWith(word)) return 1;
+        return a.word.length - b.word.length;
+      });
+
+      if (uniqueItems.length > 0) {
+        return res.json({
+          found: true,
+          items: uniqueItems,
+          total: uniqueItems.length,
+          source: 'STDICT',
+          attribution: '국립국어원 표준국어대사전 (CCL 2.0 KR)',
+        });
       }
     }
 
@@ -896,7 +927,7 @@ app.get('/api/dict/search', async (req, res) => {
       console.error('Wiktionary fallback error:', wikiErr);
     }
 
-    // 일치하는 사전 표제어가 없을 경우 미등재 단어로 정확히 거부
+    // 일치하는 사전 표제어가 없을 경우 미등재 단어로 거부
     return res.json({
       found: false,
       items: [],
@@ -910,7 +941,8 @@ app.get('/api/dict/search', async (req, res) => {
 
 // API: 국립국어원 표준국어대사전 실시간 단어 탐색 (무한 스크롤 및 전체 탐색용)
 app.get('/api/dict/explore', async (req, res) => {
-  const query = String(req.query.q || '').trim();
+  const rawQuery = String(req.query.q || '').trim();
+  const query = cleanDictWord(rawQuery);
   const page = Math.max(1, parseInt(String(req.query.page || '1'), 10));
   const num = Math.min(30, Math.max(10, parseInt(String(req.query.num || '20'), 10)));
   const apiKey = DEFAULT_STDICT_API_KEY;
@@ -947,7 +979,7 @@ app.get('/api/dict/explore', async (req, res) => {
       if (apiItems.length > 0) {
         const formattedWords = apiItems
           .map((it: any, idx: number) => {
-            const cleanWord = String(it.word || '').replace(/[0-9-^]/g, '').trim();
+            const cleanWord = cleanDictWord(it.word || '');
             if (!cleanWord || /[^가-힣]/.test(cleanWord)) return null;
 
             const supNo = it.sup_no ? String(it.sup_no) : '';
@@ -994,12 +1026,12 @@ app.get('/api/dict/explore', async (req, res) => {
             }
 
             const definitions = itemSenses.map((s, sIdx) => `${sIdx + 1}. ${s.definition}`);
-            const primaryMeaning = itemSenses[0]?.definition || '국립국어원 표준국어대사전 등재 단어';
+            const primaryMeaning = itemSenses[0]?.definition || '국립국어원 표준국어대사전에 등재된 단어입니다.';
 
             return {
               id: `${cleanWord}-${supNo || idx}-${it.target_code || idx}`,
               word: cleanWord,
-              supNo: supNo,
+              supNo,
               pos: itPos,
               meaning: primaryMeaning,
               definitions: definitions.length > 0 ? definitions : [primaryMeaning],
@@ -1016,16 +1048,16 @@ app.get('/api/dict/explore', async (req, res) => {
 
         return res.json({
           words: formattedWords,
+          hasMore: formattedWords.length >= num,
           page,
-          hasMore: true,
         });
       }
     }
-
-    res.json({ words: [], page, hasMore: false });
-  } catch (e: any) {
-    res.json({ words: [], page, hasMore: false });
+  } catch (err: any) {
+    console.error('Explore endpoint error:', err);
   }
+
+  return res.json({ words: [], hasMore: false, page });
 });
 
 // Start server with Vite middleware (Dev) or Static files (Prod)
