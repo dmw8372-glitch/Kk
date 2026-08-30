@@ -17,6 +17,7 @@ import { LegalDocumentModal, LegalDocType } from './components/LegalDocumentModa
 import { UserStats, GameRoom, Player, ChatMessage, WordChainItem } from './types';
 import { supabase } from './lib/supabaseClient';
 import { sounds } from './lib/soundEffects';
+import { buildApiUrl, DEFAULT_SEED_ROOMS } from './lib/apiHelper';
 
 // Initial default user state
 const INITIAL_STATS: UserStats = {
@@ -78,7 +79,7 @@ export function App() {
   // Navigation & View state
   const [currentTab, setCurrentTab] = useState<string>('HOME');
   const [activeRoom, setActiveRoom] = useState<GameRoom | null>(null);
-  const [publicRooms, setPublicRooms] = useState<GameRoom[]>([]);
+  const [publicRooms, setPublicRooms] = useState<GameRoom[]>(DEFAULT_SEED_ROOMS);
   const [isRefreshingRooms, setIsRefreshingRooms] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [dictSearchWord, setDictSearchWord] = useState<string>('');
@@ -193,10 +194,13 @@ export function App() {
   const refreshPublicRooms = async () => {
     setIsRefreshingRooms(true);
     try {
-      const res = await fetch('/api/rooms');
+      const url = buildApiUrl('/api/rooms');
+      const res = await fetch(url, {
+        headers: { Accept: 'application/json' },
+      });
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data.rooms)) {
+        if (Array.isArray(data.rooms) && data.rooms.length > 0) {
           const serverRooms: GameRoom[] = data.rooms.map((r: any) => ({
             id: r.id,
             title: r.title,
@@ -231,7 +235,8 @@ export function App() {
         }
       }
     } catch (e) {
-      console.error('Failed to fetch public rooms:', e);
+      // Graceful fallback to default seed rooms if network is not ready
+      setPublicRooms((prev) => (prev.length > 0 ? prev : DEFAULT_SEED_ROOMS));
     } finally {
       setIsRefreshingRooms(false);
     }
@@ -241,40 +246,49 @@ export function App() {
   const lobbyChannelRef = useRef<any>(null);
 
   useEffect(() => {
-    const lobbyChannel = supabase.channel('global_lobby_channel', {
-      config: { broadcast: { self: false } },
-    });
+    let lobbyChannel: any = null;
+    try {
+      lobbyChannel = supabase.channel('global_lobby_channel', {
+        config: { broadcast: { self: false } },
+      });
 
-    lobbyChannel
-      .on('broadcast', { event: 'lobby_event' }, ({ payload }) => {
-        if (!payload) return;
-        if (payload.type === 'ROOMS_UPDATED' && Array.isArray(payload.rooms)) {
-          setPublicRooms(payload.rooms);
-        } else if (payload.type === 'ROOM_CREATED' && payload.room) {
-          setPublicRooms((prev) => {
-            const exists = prev.some((r) => r.id === payload.room.id);
-            if (exists) return prev.map((r) => (r.id === payload.room.id ? payload.room : r));
-            return [payload.room, ...prev];
-          });
-        }
-      })
-      .subscribe();
+      lobbyChannel
+        .on('broadcast', { event: 'lobby_event' }, ({ payload }: any) => {
+          if (!payload) return;
+          if (payload.type === 'ROOMS_UPDATED' && Array.isArray(payload.rooms)) {
+            setPublicRooms(payload.rooms);
+          } else if (payload.type === 'ROOM_CREATED' && payload.room) {
+            setPublicRooms((prev) => {
+              const exists = prev.some((r) => r.id === payload.room.id);
+              if (exists) return prev.map((r) => (r.id === payload.room.id ? payload.room : r));
+              return [payload.room, ...prev];
+            });
+          }
+        })
+        .subscribe();
 
-    lobbyChannelRef.current = lobbyChannel;
+      lobbyChannelRef.current = lobbyChannel;
+    } catch (err) {
+      console.warn('Supabase lobby channel init skipped:', err);
+    }
 
     return () => {
-      lobbyChannel.unsubscribe();
+      try {
+        if (lobbyChannel) lobbyChannel.unsubscribe();
+      } catch {}
     };
   }, []);
 
   const broadcastLobbyEvent = (type: string, data: any) => {
-    if (lobbyChannelRef.current) {
-      lobbyChannelRef.current.send({
-        type: 'broadcast',
-        event: 'lobby_event',
-        payload: { type, ...data, senderId: myPlayerId, timestamp: Date.now() },
-      });
-    }
+    try {
+      if (lobbyChannelRef.current) {
+        lobbyChannelRef.current.send({
+          type: 'broadcast',
+          event: 'lobby_event',
+          payload: { type, ...data, senderId: myPlayerId, timestamp: Date.now() },
+        });
+      }
+    } catch {}
   };
 
   // Real-time Lobby Room List SSE Stream (Instantly updates lobby room list across all clients)
@@ -283,24 +297,37 @@ export function App() {
 
     let es: EventSource | null = null;
     try {
-      es = new EventSource('/api/rooms/stream');
-      es.addEventListener('ROOMS_UPDATED', (e) => {
-        try {
-          const data = JSON.parse(e.data);
-          if (Array.isArray(data.rooms)) {
-            setPublicRooms(data.rooms);
+      if (typeof window !== 'undefined' && 'EventSource' in window) {
+        const streamUrl = buildApiUrl('/api/rooms/stream');
+        es = new EventSource(streamUrl);
+        es.addEventListener('ROOMS_UPDATED', (e) => {
+          try {
+            const data = JSON.parse(e.data);
+            if (Array.isArray(data.rooms) && data.rooms.length > 0) {
+              setPublicRooms(data.rooms);
+            }
+          } catch {}
+        });
+        es.onerror = () => {
+          if (es) {
+            es.close();
+            es = null;
           }
-        } catch {}
-      });
+        };
+      }
     } catch (err) {
       console.warn('Lobby SSE not available, falling back to polling:', err);
     }
 
-    // High frequency auto-polling (1.5s) to guarantee instant public rooms update
-    const interval = setInterval(refreshPublicRooms, 1500);
+    // Auto-polling (3s) to guarantee instant public rooms update
+    const interval = setInterval(refreshPublicRooms, 3000);
     return () => {
       clearInterval(interval);
-      if (es) es.close();
+      if (es) {
+        try {
+          es.close();
+        } catch {}
+      }
     };
   }, []);
 
@@ -357,30 +384,40 @@ export function App() {
 
     let es: EventSource | null = null;
     try {
-      es = new EventSource(`/api/rooms/${activeRoom.id}/stream`);
-      es.addEventListener('SYNC_ROOM', (e) => {
-        try {
-          const data = JSON.parse(e.data);
-          if (data.room) {
-            setActiveRoom((prev) => normalizeRoomState(data.room, prev));
-            if (data.room.status === 'FINISHED') {
-              setIsGameOverOpen(true);
+      if (typeof window !== 'undefined' && 'EventSource' in window) {
+        const streamUrl = buildApiUrl(`/api/rooms/${encodeURIComponent(activeRoom.id)}/stream`);
+        es = new EventSource(streamUrl);
+        es.addEventListener('SYNC_ROOM', (e) => {
+          try {
+            const data = JSON.parse(e.data);
+            if (data.room) {
+              setActiveRoom((prev) => normalizeRoomState(data.room, prev));
+              if (data.room.status === 'FINISHED') {
+                setIsGameOverOpen(true);
+              }
             }
-          }
-        } catch {}
-      });
+          } catch {}
+        });
 
-      es.addEventListener('CHAT_MESSAGE', (e) => {
-        try {
-          const data = JSON.parse(e.data);
-          if (data.message) {
-            setChatMessages((prev) => {
-              if (prev.some((m) => m.id === data.message.id)) return prev;
-              return [...prev, data.message];
-            });
+        es.addEventListener('CHAT_MESSAGE', (e) => {
+          try {
+            const data = JSON.parse(e.data);
+            if (data.message) {
+              setChatMessages((prev) => {
+                if (prev.some((m) => m.id === data.message.id)) return prev;
+                return [...prev, data.message];
+              });
+            }
+          } catch {}
+        });
+
+        es.onerror = () => {
+          if (es) {
+            es.close();
+            es = null;
           }
-        } catch {}
-      });
+        };
+      }
     } catch (e) {
       console.warn('Room SSE stream error:', e);
     }
@@ -388,7 +425,8 @@ export function App() {
     // Secondary backup polling
     const interval = setInterval(async () => {
       try {
-        const res = await fetch(`/api/rooms/${activeRoom.id}`);
+        const url = buildApiUrl(`/api/rooms/${encodeURIComponent(activeRoom.id)}`);
+        const res = await fetch(url, { headers: { Accept: 'application/json' } });
         if (res.ok) {
           const data = await res.json();
           if (data.room) {
@@ -396,24 +434,29 @@ export function App() {
           }
         }
       } catch {}
-    }, 1800);
+    }, 2500);
 
     return () => {
       clearInterval(interval);
-      if (es) es.close();
+      if (es) {
+        try {
+          es.close();
+        } catch {}
+      }
     };
   }, [activeRoom?.id]);
 
   // Save room state to server
   const saveRoomToServer = async (room: GameRoom) => {
     try {
-      await fetch('/api/rooms/save', {
+      const url = buildApiUrl('/api/rooms/save');
+      await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify(room),
       });
     } catch (e) {
-      console.error('Failed to save room to server:', e);
+      console.warn('Failed to save room to server:', e);
     }
   };
 
@@ -786,9 +829,10 @@ export function App() {
   const sendRoomAction = async (action: string, payload: any = {}) => {
     if (!activeRoom) return;
     try {
-      await fetch(`/api/rooms/${activeRoom.id}/action`, {
+      const url = buildApiUrl(`/api/rooms/${encodeURIComponent(activeRoom.id)}/action`);
+      await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({
           action,
           payload,
@@ -796,7 +840,7 @@ export function App() {
         }),
       });
     } catch (e) {
-      console.error('Failed to send room action to server:', e);
+      console.warn('Failed to send room action to server:', e);
     }
   };
 
@@ -859,9 +903,10 @@ export function App() {
 
     // Sync to server
     try {
-      const res = await fetch('/api/rooms/create', {
+      const url = buildApiUrl('/api/rooms/create');
+      const res = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({
           roomId: newRoomId,
           title: normalized.title,
@@ -901,9 +946,10 @@ export function App() {
 
     // 1. Try server join
     try {
-      const res = await fetch('/api/rooms/join', {
+      const url = buildApiUrl('/api/rooms/join');
+      const res = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({ roomId: cleanId, player: me }),
       });
 
@@ -1382,9 +1428,10 @@ export function App() {
     sounds.playPop();
     if (activeRoom) {
       try {
-        await fetch('/api/rooms/leave', {
+        const url = buildApiUrl('/api/rooms/leave');
+        await fetch(url, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
           body: JSON.stringify({ roomId: activeRoom.id, playerId: myPlayerId }),
         });
       } catch (e) {}

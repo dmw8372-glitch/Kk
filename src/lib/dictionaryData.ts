@@ -1,6 +1,7 @@
 import { DictionaryWord } from '../types';
 import { KOREAN_LEXICON_EXPANDED } from './koreanLexicon';
 import { isPureHangul } from './hangulRules';
+import { buildApiUrl } from './apiHelper';
 
 /**
  * 국립국어원 표준국어대사전 및 표준 한국어 검증 단어 데이터베이스
@@ -332,7 +333,7 @@ export async function checkWordInDictionary(
 
   // 3. 서버 실시간 국립국어원 표준국어대사전 Open API 호출
   try {
-    const url = `/api/dict/search?q=${encodeURIComponent(trimmed)}`;
+    const url = buildApiUrl(`/api/dict/search?q=${encodeURIComponent(trimmed)}`);
 
     const res = await fetch(url);
     if (res.ok) {
@@ -397,7 +398,7 @@ export async function fetchDictionarySearchResults(
   }
 
   try {
-    const url = `/api/dict/search?q=${encodeURIComponent(trimmed)}`;
+    const url = buildApiUrl(`/api/dict/search?q=${encodeURIComponent(trimmed)}`);
     const res = await fetch(url, { signal });
     if (res.ok) {
       const data = await res.json();
@@ -432,7 +433,7 @@ export async function exploreDictionaryWords(
 
   try {
     const res = await fetch(
-      `/api/dict/explore?page=${page}&num=20&q=${encodeURIComponent(trimmed)}`,
+      buildApiUrl(`/api/dict/explore?page=${page}&num=20&q=${encodeURIComponent(trimmed)}`),
       { signal }
     );
     if (res.ok) {
