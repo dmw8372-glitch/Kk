@@ -260,25 +260,6 @@ export const HomeView: React.FC<HomeViewProps> = ({
             ))}
           </div>
         </div>
-
-        {/* Quick Rules & Guide Card */}
-        <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl p-5 text-white shadow-xs">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-bold text-purple-300">끝잇기 공식 가이드</span>
-            <span className="px-2 py-0.5 rounded-full bg-white/10 text-[10px] font-semibold text-purple-200">두음법칙 표준</span>
-          </div>
-          <h4 className="font-extrabold text-base mb-1.5">게임 규칙 & 판정 원칙</h4>
-          <p className="text-xs text-slate-300 mb-4 leading-relaxed">
-            국립국어원 표준국어대사전 50만 어휘 검증 및 두음법칙 14대 원칙이 적용됩니다.
-          </p>
-          <button
-            onClick={onOpenRules}
-            className="w-full py-2.5 px-3 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-xs font-bold text-white flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-          >
-            <span>상세 규칙 보기</span>
-            <ArrowRight className="w-3.5 h-3.5 text-purple-300" />
-          </button>
-        </div>
       </div>
     </div>
   );
