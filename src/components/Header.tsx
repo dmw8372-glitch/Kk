@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Settings } from 'lucide-react';
 import { UserStats } from '../types';
 import { sounds } from '../lib/soundEffects';
@@ -16,8 +16,37 @@ export const Header: React.FC<HeaderProps> = ({
   currentTab,
   onSelectTab,
 }) => {
+  const [isVisible, setIsVisible] = useState(true);
+  const lastScrollY = useRef(0);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY;
+
+      // Always show when near top
+      if (currentScrollY <= 15) {
+        setIsVisible(true);
+      } else if (currentScrollY > lastScrollY.current + 6) {
+        // Scrolling DOWN -> Hide the top bar
+        setIsVisible(false);
+      } else if (currentScrollY < lastScrollY.current - 6) {
+        // Scrolling UP -> Reveal the top bar
+        setIsVisible(true);
+      }
+
+      lastScrollY.current = currentScrollY;
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
   return (
-    <header className="sticky top-0 z-40 w-full bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-xs">
+    <header
+      className={`sticky top-0 z-40 w-full bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-xs transition-all duration-300 ease-in-out ${
+        isVisible ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0 pointer-events-none'
+      }`}
+    >
       <div className="max-w-7xl mx-auto px-3 sm:px-6 h-14 sm:h-16 flex items-center justify-between">
         {/* Left: Logo */}
         <button
