@@ -187,7 +187,8 @@ export function validateWordRules(
   lastWord: string | null,
   usedWords: string[]
 ): ValidationResult {
-  const trimmed = newWord.trim();
+  // Strip internal whitespace so compound terms with spaces (e.g. "기체 크로마토그래피 분석법") are processed smoothly
+  const trimmed = String(newWord || '').replace(/\s+/g, '').trim();
 
   // 1. 공백 및 기본 형식
   if (!trimmed) {
@@ -215,7 +216,8 @@ export function validateWordRules(
   }
 
   // 6. 끝말잇기 연결 & 두음법칙 검사
-  const lastChar = lastWord[lastWord.length - 1];
+  const cleanLastWord = lastWord.replace(/\s+/g, '').trim();
+  const lastChar = cleanLastWord[cleanLastWord.length - 1];
   const firstChar = trimmed[0];
   const validChars = getValidStartingChars(lastChar);
 

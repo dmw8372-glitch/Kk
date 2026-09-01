@@ -28,8 +28,33 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <aside className="w-full lg:w-64 shrink-0 flex flex-col gap-4">
-      {/* User Profile Card (Image 1 style) */}
-      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-5 flex flex-col items-center">
+      {/* Mobile Top Navigation Pills (Visible on mobile/tablet, hidden on desktop) */}
+      <div className="lg:hidden bg-white rounded-2xl border border-slate-200/90 shadow-xs p-1.5 flex items-center justify-between gap-1 overflow-x-auto no-scrollbar">
+        {menuItems.map((item) => {
+          const Icon = item.icon;
+          const active = currentTab === item.id;
+          return (
+            <button
+              key={item.id}
+              onClick={() => {
+                sounds.playPop();
+                onSelectTab(item.id);
+              }}
+              className={`flex-1 min-w-[62px] py-2 px-2 rounded-xl text-xs font-black transition-all flex flex-col sm:flex-row items-center justify-center gap-1 cursor-pointer whitespace-nowrap ${
+                active
+                  ? 'bg-[#1e2022] text-white shadow-xs'
+                  : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+              }`}
+            >
+              <Icon className={`w-4 h-4 ${active ? 'text-amber-300' : 'text-slate-500'}`} />
+              <span className="text-[11px] sm:text-xs">{item.label}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Desktop Profile Card (Hidden on mobile, visible on lg+) */}
+      <div className="hidden lg:flex bg-white rounded-2xl border border-slate-200/90 shadow-xs p-5 flex-col items-center">
         {/* Mascot Avatar Preview */}
         <div className="mb-3">
           <MascotAvatar
@@ -81,8 +106,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
       </div>
 
-      {/* Menu List */}
-      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-2 flex flex-col gap-1">
+      {/* Desktop Menu List (Hidden on mobile, visible on lg+) */}
+      <div className="hidden lg:flex bg-white rounded-2xl border border-slate-200/90 shadow-xs p-2 flex-col gap-1">
         {menuItems.map((item) => {
           const Icon = item.icon;
           const active = currentTab === item.id;
@@ -93,7 +118,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 sounds.playPop();
                 onSelectTab(item.id);
               }}
-              className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all text-left ${
+              className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all text-left cursor-pointer ${
                 active
                   ? 'bg-[#1e2022] text-white shadow-xs'
                   : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'

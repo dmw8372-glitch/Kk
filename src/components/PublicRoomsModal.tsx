@@ -274,10 +274,10 @@ export const PublicRoomsModal: React.FC<PublicRoomsModalProps> = ({
                 <KeyRound className="w-6 h-6" />
               </div>
               <h3 className="font-extrabold text-sm text-[#1e2022]">
-                방 코드 6자리 입력
+                방 코드 4자리 숫자 입력
               </h3>
               <p className="text-xs text-slate-500">
-                친구에게 전달받은 방 코드를 입력하면 즉시 해당 방에 참여합니다.
+                친구에게 전달받은 4자리 숫자 방 코드를 입력하면 즉시 참여합니다.
               </p>
 
               <input
@@ -285,13 +285,13 @@ export const PublicRoomsModal: React.FC<PublicRoomsModalProps> = ({
                 maxLength={6}
                 value={directCode}
                 onChange={(e) => setDirectCode(e.target.value.trim())}
-                placeholder="예: 630157"
+                placeholder="예: 7421"
                 className="w-48 mx-auto px-4 py-3 text-center text-xl font-mono font-black tracking-widest rounded-xl border-2 border-slate-300 focus:outline-none focus:ring-2 focus:ring-purple-500 uppercase block"
               />
 
               <button
                 type="submit"
-                disabled={directCode.length < 4}
+                disabled={directCode.length < 3}
                 className="w-full py-3 bg-[#1e2022] hover:bg-black disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold text-xs rounded-xl transition-colors cursor-pointer"
               >
                 방 입장하기

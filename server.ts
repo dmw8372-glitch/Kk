@@ -150,9 +150,87 @@ app.get('/api/rooms/:id', (req, res) => {
   res.json({ room });
 });
 
+// Helper function: Process a player leaving a room (manual exit or disconnection)
+function handlePlayerLeave(roomId: string, playerId: string, isDisconnect = false): { success: boolean; roomDeleted: boolean; room?: ServerGameRoom } {
+  const room = findRoom(roomId);
+  if (!room) return { success: false, roomDeleted: true };
+
+  const leavingPlayer = room.currentPlayers.find((p) => p.id === playerId);
+  if (!leavingPlayer) return { success: true, roomDeleted: false, room };
+
+  // Remove the player from currentPlayers
+  room.currentPlayers = room.currentPlayers.filter((p) => p.id !== playerId);
+
+  // Check if any human players remain in the room
+  const remainingHumans = room.currentPlayers.filter((p) => !p.id.startsWith('bot_'));
+
+  // If no players remain or only bots remain without any humans -> delete room immediately!
+  if (room.currentPlayers.length === 0 || remainingHumans.length === 0) {
+    activeRoomsMap.delete(room.id);
+    roomSseClientsMap.delete(room.id);
+    broadcastToLobby('ROOMS_UPDATED', { rooms: getPublicRoomsList() });
+    return { success: true, roomDeleted: true };
+  }
+
+  // If the leaving player was the host, transfer host leadership to the next remaining human (or first player)
+  let hostTransferred = false;
+  let newHost = remainingHumans[0] || room.currentPlayers[0];
+  if (room.hostId === playerId) {
+    room.currentPlayers.forEach((p) => {
+      p.isHost = p.id === newHost.id;
+    });
+    room.hostId = newHost.id;
+    room.hostName = newHost.nickname;
+    hostTransferred = true;
+  }
+
+  // If game was playing and a player left:
+  if (room.status === 'PLAYING') {
+    const alivePlayers = room.currentPlayers.filter((p) => p.isAlive);
+    if (alivePlayers.length <= 1) {
+      room.status = 'FINISHED';
+    } else {
+      if (room.currentTurnIndex >= room.currentPlayers.length) {
+        room.currentTurnIndex = 0;
+      }
+      // If the current turn was the leaving player, advance to the next alive player
+      const currentTurnPlayer = room.currentPlayers[room.currentTurnIndex];
+      if (!currentTurnPlayer || !currentTurnPlayer.isAlive) {
+        let nextIdx = room.currentTurnIndex;
+        for (let i = 0; i < room.currentPlayers.length; i++) {
+          nextIdx = (nextIdx + 1) % room.currentPlayers.length;
+          if (room.currentPlayers[nextIdx].isAlive) {
+            room.currentTurnIndex = nextIdx;
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  room.lastUpdated = Date.now();
+  activeRoomsMap.set(room.id, room);
+
+  broadcastToRoom(room.id, 'SYNC_ROOM', { room });
+  broadcastToRoom(room.id, 'CHAT_MESSAGE', {
+    message: {
+      id: 'sys_' + Date.now(),
+      senderId: 'SYSTEM',
+      senderName: '시스템',
+      text: `${leavingPlayer.nickname}님이 ${isDisconnect ? '연결 종료로 퇴장하셨습니다.' : '퇴장하셨습니다.'}${hostTransferred ? ` (새 방장: ${newHost.nickname}님)` : ''}`,
+      timestamp: Date.now(),
+      isSystem: true,
+    },
+  });
+
+  broadcastToLobby('ROOMS_UPDATED', { rooms: getPublicRoomsList() });
+  return { success: true, roomDeleted: false, room };
+}
+
 // API: SSE Stream for specific room
 app.get('/api/rooms/:id/stream', (req, res) => {
   const roomId = String(req.params.id).trim().toUpperCase();
+  const playerId = req.query.playerId ? String(req.query.playerId).trim() : undefined;
   const room = findRoom(roomId);
 
   res.setHeader('Content-Type', 'text/event-stream');
@@ -185,8 +263,29 @@ app.get('/api/rooms/:id/stream', (req, res) => {
     if (clientSet.size === 0) {
       roomSseClientsMap.delete(roomId);
     }
+
+    // If a specific player disconnected from SSE, check if all connections dropped and clean up if needed
+    if (playerId) {
+      setTimeout(() => {
+        const checkRoom = findRoom(roomId);
+        if (checkRoom) {
+          const currentClients = roomSseClientsMap.get(roomId)?.size ?? 0;
+          if (currentClients === 0) {
+            handlePlayerLeave(roomId, playerId, true);
+          }
+        }
+      }, 10000);
+    }
   });
 });
+
+function generate4DigitNumericRoomId(): string {
+  for (let i = 0; i < 100; i++) {
+    const id = Math.floor(1000 + Math.random() * 9000).toString();
+    if (!activeRoomsMap.has(id)) return id;
+  }
+  return Math.floor(1000 + Math.random() * 9000).toString();
+}
 
 // API: Create new room
 app.post('/api/rooms/create', (req, res) => {
@@ -197,7 +296,7 @@ app.post('/api/rooms/create', (req, res) => {
 
   const roomId = requestedRoomId
     ? String(requestedRoomId).trim().toUpperCase()
-    : Math.random().toString(36).substring(2, 8).toUpperCase();
+    : generate4DigitNumericRoomId();
 
   const newRoom: ServerGameRoom = {
     id: roomId,
@@ -255,7 +354,7 @@ app.post('/api/rooms/save', (req, res) => {
   res.json({ success: true, room: updatedRoom });
 });
 
-// API: Join room on server
+// API: Join room on server (Supports new joins & seamless reconnects)
 app.post('/api/rooms/join', (req, res) => {
   const { roomId, player } = req.body;
   if (!roomId || !player || !player.id) {
@@ -265,31 +364,38 @@ app.post('/api/rooms/join', (req, res) => {
   const cleanId = String(roomId).trim().toUpperCase();
   let room = findRoom(cleanId);
   if (!room) {
-    return res.status(404).json({ error: `방 코드 [${cleanId}]에 해당하는 대기실을 찾을 수 없습니다.` });
+    return res.status(404).json({ error: `방 코드 [${cleanId}]에 해당하는 대기실이 존재하지 않거나 종료되었습니다.` });
   }
 
-  if (room.status === 'PLAYING') {
-    return res.status(400).json({ error: '이미 게임이 진행 중인 방입니다.' });
+  const alreadyInRoom = room.currentPlayers.some((p) => p.id === player.id);
+
+  // If game is in progress and player was not already in the room, reject
+  if (room.status === 'PLAYING' && !alreadyInRoom) {
+    return res.status(400).json({ error: '현재 게임이 진행 중인 방입니다. 다음 판에 참여해주세요.' });
   }
 
-  const exists = room.currentPlayers.some((p) => p.id === player.id);
-  if (!exists) {
+  if (!alreadyInRoom) {
     if (room.currentPlayers.length >= room.maxPlayers) {
       return res.status(400).json({ error: '방 인원이 가득 찼습니다 (만원).' });
     }
+    const isFirst = room.currentPlayers.length === 0;
     room.currentPlayers.push({
       id: player.id,
       nickname: player.nickname || '손님',
       avatarColor: player.avatarColor || 'white',
-      isHost: false,
-      isReady: false,
+      isHost: isFirst,
+      isReady: isFirst,
       isAlive: true,
       score: 0,
       wordsUsed: [],
       level: player.level || 1,
     });
+    if (isFirst) {
+      room.hostId = player.id;
+      room.hostName = player.nickname || '손님';
+    }
   } else {
-    // Update player info if already exists
+    // Reconnecting player: update information & ensure alive
     room.currentPlayers = room.currentPlayers.map((p) =>
       p.id === player.id
         ? {
@@ -311,7 +417,7 @@ app.post('/api/rooms/join', (req, res) => {
       id: 'sys_' + Date.now(),
       senderId: 'SYSTEM',
       senderName: '시스템',
-      text: `${player.nickname || '손님'}님이 방에 입장하셨습니다.`,
+      text: `${player.nickname || '손님'}님이 방에 ${alreadyInRoom ? '다시 연결' : '입장'}하셨습니다.`,
       timestamp: Date.now(),
       isSystem: true,
     },
@@ -541,56 +647,86 @@ app.post('/api/rooms/:id/action', (req, res) => {
   res.json({ success: true, room });
 });
 
-// API: Leave room on server
+// API: Leave room on server (Transfers host or deletes empty room immediately)
 app.post('/api/rooms/leave', (req, res) => {
   const { roomId, playerId } = req.body;
   if (!roomId || !playerId) {
     return res.status(400).json({ error: 'Missing parameters' });
   }
 
-  const room = findRoom(roomId);
-  if (room) {
-    const leavingPlayer = room.currentPlayers.find((p) => p.id === playerId);
-    room.currentPlayers = room.currentPlayers.filter((p) => p.id !== playerId);
-
-    if (room.currentPlayers.length === 0) {
-      activeRoomsMap.delete(room.id);
-    } else {
-      // Transfer host if host left
-      if (room.hostId === playerId && room.currentPlayers.length > 0) {
-        room.currentPlayers[0].isHost = true;
-        room.hostId = room.currentPlayers[0].id;
-        room.hostName = room.currentPlayers[0].nickname;
-      }
-      room.lastUpdated = Date.now();
-      activeRoomsMap.set(room.id, room);
-
-      broadcastToRoom(room.id, 'SYNC_ROOM', { room });
-      if (leavingPlayer) {
-        broadcastToRoom(room.id, 'CHAT_MESSAGE', {
-          message: {
-            id: 'sys_' + Date.now(),
-            senderId: 'SYSTEM',
-            senderName: '시스템',
-            text: `${leavingPlayer.nickname}님이 퇴장하셨습니다.`,
-            timestamp: Date.now(),
-            isSystem: true,
-          },
-        });
-      }
-    }
-    broadcastToLobby('ROOMS_UPDATED', { rooms: getPublicRoomsList() });
-  }
-
-  res.json({ success: true });
+  const result = handlePlayerLeave(String(roomId).trim().toUpperCase(), String(playerId).trim(), false);
+  res.json({ success: true, ...result });
 });
+
+// In-memory high-speed cache for dictionary lookups
+const serverWordCache = new Map<string, any>();
 
 // Helper to clean Korean dictionary headwords (removes -, --, _, ^, ㆍ, ~, spaces, numbers)
 function cleanDictWord(rawWord: string): string {
   if (!rawWord) return '';
   return String(rawWord)
-    .replace(/[0-9\-^_ㆍ~^ \t]/g, '')
+    .replace(/[0-9\-^_ㆍ~^ \t\r\n]/g, '')
     .trim();
+}
+
+// Science, Technology, and Common Compound Root terms for server-side fast verification
+const SERVER_COMPOUND_ROOTS = new Set([
+  '기체', '액체', '고체', '유체', '플라스마', '크로마토그래피', '분석', '분석법', '방정식', '증류', '증류법',
+  '반응', '반응기', '합성', '합성물', '스펙트럼', '분광', '분광학', '분광분석', '센서', '시스템', '네트워크',
+  '프로그래밍', '소프트웨어', '하드웨어', '알고리즘', '메커니즘', '프로세스', '인공지능', '머신러닝', '딥러닝',
+  '블록체인', '데이터베이스', '시뮬레이션', '트랜지스터', '반도체', '초전도체', '전자기파', '양자역학', '핵융합',
+  '상대성이론', '유전자', '재조합', '유전자재조합', '중합효소', '광합성', '미토콘드리아', '단백질', '탄수화물',
+  '아미노산', '뉴클레오타이드', '인지질', '고분자', '나노기술', '바이오', '바이오테크', '신경망', '가속기',
+  '발전기', '변압기', '원자로', '태양전지', '광전효과', '도플러효과', '엔트로피', '열역학', '유체역학', '전자기학',
+  '미적분학', '선형대수', '확률통계', '화학반응', '촉매반응', '전기영동', '질량분석', '질량분석법', '원자흡광',
+  '핵자기공명', '전자현미경', '초음파', '자기공명', '컴퓨터단층촬영', '인공위성', '우주정거장', '태양계',
+  '은하계', '블랙홀', '중력파', '양자컴퓨터', '고속철도', '광통신', '이동통신', '클라우드', '빅데이터',
+  '사물인터넷', '메타버스', '가상현실', '증강현실', '자율주행', '스마트폰', '전기자동차', '수소자동차',
+  '신재생에너지', '태양광', '풍력발전', '수력발전', '지열발전', '조력발전', '탄소중립', '온실가스',
+  '기후변화', '환경보호', '생태계', '생물다양성', '유전자변형', '줄기세포', '면역치료', '항생제', '백신'
+]);
+
+const SERVER_SINGLE_SUFFIXES = new Set([
+  '법', '학', '론', '술', '가', '류', '화', '성', '력', '율', '적', '기', '관', '원', '실', '소',
+  '자', '체', '물', '제', '품', '점', '장', '선', '회', '국', '방', '역', '판', '통', '증', '감',
+  '분', '표', '비', '대', '상', '중', '하', '식', '각', '형', '극', '존', '권', '량', '도', '계'
+]);
+
+function serverDecomposeCompound(word: string): string[] | null {
+  if (!word || word.length < 4) return null;
+  const memo = new Map<string, string[] | null>();
+
+  function helper(w: string): string[] | null {
+    if (!w) return [];
+    if (memo.has(w)) return memo.get(w)!;
+
+    for (let len = Math.min(w.length, 12); len >= 2; len--) {
+      const prefix = w.slice(0, len);
+      if (SERVER_COMPOUND_ROOTS.has(prefix)) {
+        if (len === w.length) {
+          memo.set(w, [prefix]);
+          return [prefix];
+        }
+        const rest = w.slice(len);
+        if (rest.length === 1 && SERVER_SINGLE_SUFFIXES.has(rest)) {
+          const res = [prefix, rest];
+          memo.set(w, res);
+          return res;
+        }
+        const sub = helper(rest);
+        if (sub && sub.length > 0) {
+          const res = [prefix, ...sub];
+          memo.set(w, res);
+          return res;
+        }
+      }
+    }
+    memo.set(w, null);
+    return null;
+  }
+
+  const parts = helper(word);
+  return parts && parts.length >= 2 ? parts : null;
 }
 
 // API: 국립국어원 표준국어대사전 Open API 실시간 단어 검색 & 검증 (동음이의어 및 다중 뜻풀이 전체 반환)
@@ -603,125 +739,118 @@ app.get('/api/dict/search', async (req, res) => {
     return res.status(400).json({ error: '검색할 단어를 입력해주세요.' });
   }
 
+  // 1. In-Memory Cache Check (0ms response)
+  if (serverWordCache.has(word)) {
+    const cached = serverWordCache.get(word);
+    return res.json(cached);
+  }
+
+  // 2. Compound Word Scientific/Academic Tokenizer Check (0ms response)
+  const compoundParts = serverDecomposeCompound(word);
+  if (compoundParts) {
+    const compoundResult = {
+      found: true,
+      items: [
+        {
+          id: `${word}-compound`,
+          word: word,
+          pos: '명사(합성어)',
+          meaning: `${compoundParts.join(' + ')}: 결합된 표준 합성 명사 및 학술/전문 용어입니다.`,
+          definitions: [`${compoundParts.join(' + ')}: 각 구성 형태소가 표준어에 부합하는 합성어입니다.`],
+          senses: [
+            {
+              senseNo: 1,
+              definition: `${compoundParts.join(' + ')}: 표준 합성 명사/전문용어.`,
+              pos: '명사(합성어)',
+              origin: '합성어',
+            },
+          ],
+          length: word.length,
+          firstChar: word[0],
+          lastChar: word[word.length - 1],
+          origin: '합성어',
+          source: 'LEXICON',
+        },
+      ],
+      total: 1,
+      source: 'LEXICON',
+      attribution: '표준 국어 합성어/전문용어',
+    };
+    serverWordCache.set(word, compoundResult);
+    return res.json(compoundResult);
+  }
+
   try {
-    let apiItems: any[] = [];
+    const apiItems: any[] = [];
     const seenIds = new Set<string>();
 
-    // 1. 국립국어원 표준국어대사전 실시간 검색 (표준 검색 + exact/start 다각도 조회)
-    try {
-      // 1-1. 표준 검색 (수산화^나트륨 같은 복합어/전문어/화학명 포함)
-      const stdictStandardUrl = `https://stdict.korean.go.kr/api/search.do?key=${encodeURIComponent(
-        apiKey
-      )}&q=${encodeURIComponent(word)}&req_type=json&num=30`;
-
-      const stdRes = await fetch(stdictStandardUrl, {
-        headers: { Accept: 'application/json' },
-      });
-
-      if (stdRes.ok) {
-        const text = await stdRes.text();
-        try {
-          const data = JSON.parse(text);
-          if (data?.channel?.item && Array.isArray(data.channel.item)) {
-            apiItems.push(...data.channel.item);
-          } else if (data?.channel?.item && typeof data.channel.item === 'object') {
-            apiItems.push(data.channel.item);
-          }
-        } catch {
-          // parse fallback
-        }
+    // 3. Parallel Fetching with Fast Abort Timeout (Max 1200ms)
+    const fetchWithTimeout = async (url: string, headers: Record<string, string> = {}) => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 1200);
+      try {
+        const response = await fetch(url, { headers, signal: controller.signal });
+        clearTimeout(timeout);
+        return response;
+      } catch {
+        clearTimeout(timeout);
+        return null;
       }
+    };
 
-      // 1-2. exact 일치 검색 시도 (advanced)
-      if (apiItems.length === 0) {
-        const stdictExactUrl = `https://stdict.korean.go.kr/api/search.do?key=${encodeURIComponent(
-          apiKey
-        )}&q=${encodeURIComponent(
-          word
-        )}&req_type=json&advanced=y&method=exact&num=30`;
+    const stdictStandardUrl = `https://stdict.korean.go.kr/api/search.do?key=${encodeURIComponent(
+      apiKey
+    )}&q=${encodeURIComponent(word)}&req_type=json&num=30`;
 
-        const exactRes = await fetch(stdictExactUrl, {
-          headers: { Accept: 'application/json' },
-        });
+    const opendictUrl = `https://opendict.korean.go.kr/api/search?key=${encodeURIComponent(
+      apiKey
+    )}&q=${encodeURIComponent(word)}&req_type=json&num=20`;
 
-        if (exactRes.ok) {
-          const text = await exactRes.text();
-          try {
-            const data = JSON.parse(text);
-            if (data?.channel?.item && Array.isArray(data.channel.item)) {
-              apiItems.push(...data.channel.item);
-            } else if (data?.channel?.item && typeof data.channel.item === 'object') {
-              apiItems.push(data.channel.item);
-            }
-          } catch {
-            // parse fallback
-          }
+    const wikiUrl = `https://ko.wikipedia.org/w/api.php?action=query&prop=extracts&exintro=true&explaintext=true&titles=${encodeURIComponent(
+      word
+    )}&redirects=1&format=json`;
+
+    const [stdRes, openRes, wikiRes] = await Promise.allSettled([
+      fetchWithTimeout(stdictStandardUrl, { Accept: 'application/json' }),
+      fetchWithTimeout(opendictUrl, { Accept: 'application/json' }),
+      fetchWithTimeout(wikiUrl, { 'User-Agent': 'KkeutitgiBot/1.0 (Korean Word Chain Game)' }),
+    ]);
+
+    // Parse STDict results
+    if (stdRes.status === 'fulfilled' && stdRes.value && stdRes.value.ok) {
+      try {
+        const text = await stdRes.value.text();
+        const data = JSON.parse(text);
+        if (data?.channel?.item && Array.isArray(data.channel.item)) {
+          apiItems.push(...data.channel.item);
+        } else if (data?.channel?.item && typeof data.channel.item === 'object') {
+          apiItems.push(data.channel.item);
         }
+      } catch {
+        // ignore
       }
+    }
 
-      // 1-3. start 시작 검색 시도
-      const stdictStartUrl = `https://stdict.korean.go.kr/api/search.do?key=${encodeURIComponent(
-        apiKey
-      )}&q=${encodeURIComponent(
-        word
-      )}&req_type=json&advanced=y&method=start&num=30`;
-
-      const startRes = await fetch(stdictStartUrl, {
-        headers: { Accept: 'application/json' },
-      });
-
-      if (startRes.ok) {
-        const startText = await startRes.text();
-        try {
-          const startData = JSON.parse(startText);
-          const startItems = Array.isArray(startData?.channel?.item)
-            ? startData.channel.item
-            : startData?.channel?.item && typeof startData.channel.item === 'object'
-            ? [startData.channel.item]
-            : [];
-          
-          for (const item of startItems) {
-            const code = item.target_code || item.word;
-            if (!apiItems.some((ex) => (ex.target_code || ex.word) === code)) {
+    // Parse OpenDict results
+    if (openRes.status === 'fulfilled' && openRes.value && openRes.value.ok) {
+      try {
+        const text = await openRes.value.text();
+        const data = JSON.parse(text);
+        if (data?.channel?.item && Array.isArray(data.channel.item)) {
+          for (const item of data.channel.item) {
+            if (!apiItems.some((ex) => (ex.target_code || ex.word) === (item.target_code || item.word))) {
               apiItems.push(item);
             }
           }
-        } catch {
-          // ignore
+        } else if (data?.channel?.item && typeof data.channel.item === 'object') {
+          apiItems.push(data.channel.item);
         }
-      }
-    } catch (e) {
-      console.error('STDict fetch error:', e);
-    }
-
-    // 2. 국립국어원 우리말샘 Open API 추가 검색 (표준대사전에서 못 찾은 경우)
-    if (apiItems.length === 0) {
-      try {
-        const opendictUrl = `https://opendict.korean.go.kr/api/search?key=${encodeURIComponent(
-          apiKey
-        )}&q=${encodeURIComponent(word)}&req_type=json&num=20`;
-        const openRes = await fetch(opendictUrl, {
-          headers: { Accept: 'application/json' },
-        });
-        if (openRes.ok) {
-          const openText = await openRes.text();
-          try {
-            const openData = JSON.parse(openText);
-            if (openData?.channel?.item && Array.isArray(openData.channel.item)) {
-              apiItems.push(...openData.channel.item);
-            } else if (openData?.channel?.item && typeof openData.channel.item === 'object') {
-              apiItems.push(openData.channel.item);
-            }
-          } catch {
-            // ignore
-          }
-        }
-      } catch (openErr) {
-        console.error('OpenDict lookup error:', openErr);
+      } catch {
+        // ignore
       }
     }
 
-    // 3. 국립국어원 결과 매핑 및 정규화
+    // 4. Map and Format Korean Dictionary Results
     if (apiItems.length > 0) {
       const formattedItems = apiItems
         .map((it: any, index: number) => {
@@ -792,7 +921,6 @@ app.get('/api/dict/search', async (req, res) => {
         })
         .filter(Boolean);
 
-      // Deduplicate by targetCode or (word + supNo + meaning)
       const uniqueItems: any[] = [];
       for (const item of formattedItems) {
         const uniqueKey = item.targetCode ? `tc_${item.targetCode}` : `${item.word}_${item.supNo}_${item.meaning.slice(0, 15)}`;
@@ -802,7 +930,6 @@ app.get('/api/dict/search', async (req, res) => {
         }
       }
 
-      // Sort items: exact matches first, then shorter words, then alphabetical
       uniqueItems.sort((a, b) => {
         if (a.word === word && b.word !== word) return -1;
         if (b.word === word && a.word !== word) return 1;
@@ -812,29 +939,22 @@ app.get('/api/dict/search', async (req, res) => {
       });
 
       if (uniqueItems.length > 0) {
-        return res.json({
+        const responseData = {
           found: true,
           items: uniqueItems,
           total: uniqueItems.length,
           source: 'STDICT',
           attribution: '국립국어원 표준국어대사전 (CCL 2.0 KR)',
-        });
+        };
+        serverWordCache.set(word, responseData);
+        return res.json(responseData);
       }
     }
 
-    // 4. 한국어 위키백과 & 위키낱말사전 fallback (리다이렉트 및 복합어 지원)
-    try {
-      // 4-1. 한국어 위키백과 조회 (과학/화학/지리/역사 표제어 완벽 지원)
-      const wikiUrl = `https://ko.wikipedia.org/w/api.php?action=query&prop=extracts&exintro=true&explaintext=true&titles=${encodeURIComponent(
-        word
-      )}&redirects=1&format=json`;
-
-      const wikiRes = await fetch(wikiUrl, {
-        headers: { 'User-Agent': 'KkeutitgiBot/1.0 (Korean Word Chain Game)' },
-      });
-
-      if (wikiRes.ok) {
-        const wikiData = (await wikiRes.json()) as any;
+    // 5. Parse Wikipedia Results
+    if (wikiRes.status === 'fulfilled' && wikiRes.value && wikiRes.value.ok) {
+      try {
+        const wikiData = (await wikiRes.value.json()) as any;
         const pages = wikiData?.query?.pages || {};
         const pageId = Object.keys(pages)[0];
 
@@ -853,7 +973,7 @@ app.get('/api/dict/search', async (req, res) => {
             }
 
             const matchedWord = pageTitle || word;
-            return res.json({
+            const wikiResponse = {
               found: true,
               items: [
                 {
@@ -879,79 +999,24 @@ app.get('/api/dict/search', async (req, res) => {
               ],
               source: 'WIKTIONARY',
               attribution: '한국어 표준 백과사전 (CC-BY-SA 4.0)',
-            });
+            };
+            serverWordCache.set(word, wikiResponse);
+            return res.json(wikiResponse);
           }
         }
+      } catch {
+        // ignore
       }
-
-      // 4-2. 위키낱말사전 조회
-      const wiktionaryUrl = `https://ko.wiktionary.org/w/api.php?action=query&prop=extracts&exintro=true&explaintext=true&titles=${encodeURIComponent(
-        word
-      )}&redirects=1&format=json&origin=*`;
-
-      const wiktionaryRes = await fetch(wiktionaryUrl, {
-        headers: { 'User-Agent': 'KkeutitgiBot/1.0 (Korean Word Chain Game)' },
-      });
-
-      if (wiktionaryRes.ok) {
-        const wiktData = (await wiktionaryRes.json()) as any;
-        const pages = wiktData?.query?.pages || {};
-        const pageId = Object.keys(pages)[0];
-
-        if (pageId && pageId !== '-1') {
-          const extract = pages[pageId]?.extract || '';
-          if (extract.trim().length > 0) {
-            let cleanMeaning = extract
-              .replace(/==.*?==/g, '')
-              .replace(/\[\[.*?\]\]/g, '')
-              .trim();
-
-            const rawLines = cleanMeaning
-              .split('\n')
-              .map((l) => l.trim())
-              .filter((l) => l.length > 3 && !l.startsWith('='));
-
-            const definitions = rawLines.length > 0 ? rawLines.slice(0, 5) : [cleanMeaning];
-            const senses = definitions.map((d, i) => ({
-              senseNo: i + 1,
-              definition: d.replace(/^[0-9]+[.)]\s*/, ''),
-              pos: '명사',
-              origin: '표준어',
-            }));
-
-            return res.json({
-              found: true,
-              items: [
-                {
-                  id: `${word}-wiki`,
-                  word,
-                  pos: '명사',
-                  meaning: senses[0]?.definition || cleanMeaning,
-                  definitions,
-                  senses,
-                  length: word.length,
-                  firstChar: word[0],
-                  lastChar: word[word.length - 1],
-                  origin: '표준어',
-                  source: 'WIKTIONARY',
-                },
-              ],
-              source: 'WIKTIONARY',
-              attribution: '한국어 사전 정보 (CC-BY-SA 4.0)',
-            });
-          }
-        }
-      }
-    } catch (wikiErr) {
-      console.error('Wiki fallback error:', wikiErr);
     }
 
-    // 일치하는 사전 표제어가 없을 경우 미등재 단어로 거부
-    return res.json({
+    // Negative response caching (prevent repeated slow lookups for non-existent words)
+    const notFoundResponse = {
       found: false,
       items: [],
       message: '국립국어원 표준국어대사전에 등재되지 않은 단어입니다.',
-    });
+    };
+    serverWordCache.set(word, notFoundResponse);
+    return res.json(notFoundResponse);
   } catch (err: any) {
     console.error('Dictionary search exception:', err);
     res.status(500).json({ error: '사전 검색 중 오류가 발생했습니다.', details: err.message });

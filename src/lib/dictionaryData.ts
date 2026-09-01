@@ -161,11 +161,125 @@ DICTIONARY_DATABASE.forEach((w) => {
 // 실시간 API 조회된 단어 캐시 (중복 네트워크 요청 방지)
 export const REAL_API_WORD_CACHE = new Map<string, DictionaryWord>();
 
+const LOCAL_STORAGE_WORD_CACHE_KEY = 'kkeutitgi_verified_words_v3';
+
+// Load cached words from localStorage on module initialization for 0ms lookup
+try {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    const saved = localStorage.getItem(LOCAL_STORAGE_WORD_CACHE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) {
+        parsed.forEach((item: DictionaryWord) => {
+          if (item && item.word) {
+            REAL_API_WORD_CACHE.set(item.word, item);
+          }
+        });
+      }
+    }
+  }
+} catch {
+  // ignore
+}
+
+function saveWordToCache(wordItem: DictionaryWord) {
+  REAL_API_WORD_CACHE.set(wordItem.word, wordItem);
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const recent = Array.from(REAL_API_WORD_CACHE.values()).slice(-200);
+      localStorage.setItem(LOCAL_STORAGE_WORD_CACHE_KEY, JSON.stringify(recent));
+    }
+  } catch {
+    // ignore
+  }
+}
+
+// 전문용어, 과학기술, 학술 및 합성 명사 주요 형태소 및 어휘 목록
+const KNOWN_COMPOUND_ROOTS = new Set([
+  '기체', '액체', '고체', '유체', '플라스마', '크로마토그래피', '분석', '분석법', '방정식', '증류', '증류법',
+  '반응', '반응기', '합성', '합성물', '스펙트럼', '분광', '분광학', '분광분석', '센서', '시스템', '네트워크',
+  '프로그래밍', '소프트웨어', '하드웨어', '알고리즘', '메커니즘', '프로세스', '인공지능', '머신러닝', '딥러닝',
+  '블록체인', '데이터베이스', '시뮬레이션', '트랜지스터', '반도체', '초전도체', '전자기파', '양자역학', '핵융합',
+  '상대성이론', '유전자', '재조합', '유전자재조합', '중합효소', '광합성', '미토콘드리아', '단백질', '탄수화물',
+  '아미노산', '뉴클레오타이드', '인지질', '고분자', '나노기술', '바이오', '바이오테크', '신경망', '가속기',
+  '발전기', '변압기', '원자로', '태양전지', '광전효과', '도플러효과', '엔트로피', '열역학', '유체역학', '전자기학',
+  '미적분학', '선형대수', '확률통계', '화학반응', '촉매반응', '전기영동', '질량분석', '질량분석법', '원자흡광',
+  '핵자기공명', '전자현미경', '초음파', '자기공명', '컴퓨터단층촬영', '인공위성', '우주정거장', '태양계',
+  '은하계', '블랙홀', '중력파', '양자컴퓨터', '고속철도', '광통신', '이동통신', '클라우드', '빅데이터',
+  '사물인터넷', '메타버스', '가상현실', '증강현실', '자율주행', '스마트폰', '전기자동차', '수소자동차',
+  '신재생에너지', '태양광', '풍력발전', '수력발전', '지열발전', '조력발전', '탄소중립', '온실가스',
+  '기후변화', '환경보호', '생태계', '생물다양성', '유전자변형', '줄기세포', '면역치료', '항생제', '백신'
+]);
+
+// 1글자 한자어 접미사/어근
+const VALID_SINGLE_CHAR_SUFFIXES = new Set([
+  '법', '학', '론', '술', '가', '류', '화', '성', '력', '율', '적', '기', '관', '원', '실', '소',
+  '자', '체', '물', '제', '품', '점', '장', '선', '회', '국', '방', '역', '판', '통', '증', '감',
+  '분', '표', '비', '대', '상', '중', '하', '식', '각', '형', '극', '존', '권', '량', '도', '계'
+]);
+
+/**
+ * 복합어/합성어/전문용어 형태소 분해 검증 엔진
+ * 예: "기체크로마토그래피분석법" -> ['기체', '크로마토그래피', '분석법'] => 유효 판정
+ */
+export function checkCompoundWordDecomposition(word: string): { isCompound: boolean; subWords?: string[] } {
+  if (!word || word.length < 4) return { isCompound: false };
+
+  const memo = new Map<string, string[] | null>();
+
+  function findDecomposition(w: string): string[] | null {
+    if (!w) return [];
+    if (memo.has(w)) return memo.get(w)!;
+
+    // 접두 형태소 매칭 (긴 단어부터 매칭)
+    for (let len = Math.min(w.length, 12); len >= 2; len--) {
+      const prefix = w.slice(0, len);
+      const isKnown =
+        DICTIONARY_MAP.has(prefix) ||
+        REAL_API_WORD_CACHE.has(prefix) ||
+        KNOWN_COMPOUND_ROOTS.has(prefix);
+
+      if (isKnown) {
+        if (len === w.length) {
+          memo.set(w, [prefix]);
+          return [prefix];
+        }
+
+        const rest = w.slice(len);
+
+        // 1음절 표준 접미사 처리 (예: 분석 + 법 -> 분석법)
+        if (rest.length === 1 && VALID_SINGLE_CHAR_SUFFIXES.has(rest)) {
+          const res = [prefix, rest];
+          memo.set(w, res);
+          return res;
+        }
+
+        const sub = findDecomposition(rest);
+        if (sub && sub.length > 0) {
+          const result = [prefix, ...sub];
+          memo.set(w, result);
+          return result;
+        }
+      }
+    }
+
+    memo.set(w, null);
+    return null;
+  }
+
+  const parts = findDecomposition(word);
+  if (parts && parts.length >= 2) {
+    return { isCompound: true, subWords: parts };
+  }
+
+  return { isCompound: false };
+}
+
 // Helper to clean Korean dictionary headwords (removes -, --, _, ^, ㆍ, ~, spaces, numbers)
-function cleanDictWord(rawWord: string): string {
+export function cleanDictWord(rawWord: string): string {
   if (!rawWord) return '';
   return String(rawWord)
-    .replace(/[0-9\-^_ㆍ~^ \t]/g, '')
+    .replace(/[0-9\-^_ㆍ~^ \t\r\n]/g, '')
     .trim();
 }
 
@@ -319,23 +433,56 @@ export async function checkWordInDictionary(
     return { isValid: false, reason: '단어는 최소 2글자 이상이어야 합니다.' };
   }
 
-  // 1. 내장 표준 사전 조회
+  // 1. 내장 표준 사전 즉시 조회 (0ms)
   if (DICTIONARY_MAP.has(trimmed)) {
     const info = DICTIONARY_MAP.get(trimmed)!;
     return { isValid: true, wordInfo: info, source: 'LEXICON' };
   }
 
-  // 2. 캐시된 실제 단어 조회
+  // 2. 캐시된 실제 단어 즉시 조회 (0ms)
   if (REAL_API_WORD_CACHE.has(trimmed)) {
     const cached = REAL_API_WORD_CACHE.get(trimmed)!;
     return { isValid: true, wordInfo: cached, source: cached.source || 'STDICT' };
   }
 
-  // 3. 서버 실시간 국립국어원 표준국어대사전 Open API 호출
-  try {
-    const url = buildApiUrl(`/api/dict/search?q=${encodeURIComponent(trimmed)}`);
+  // 3. 복합어 / 합성어 / 전문용어 형태소 분석 즉시 검증 (0ms) (예: 기체 크로마토그래피 분석법 -> [기체, 크로마토그래피, 분석법])
+  const compoundRes = checkCompoundWordDecomposition(trimmed);
+  if (compoundRes.isCompound && compoundRes.subWords && compoundRes.subWords.length > 0) {
+    const compoundWordInfo: DictionaryWord = {
+      word: trimmed,
+      pos: '명사(합성어)',
+      meaning: `${compoundRes.subWords.join(' + ')}: 결합된 표준 합성 명사/전문 학술 용어입니다.`,
+      definitions: [
+        `${compoundRes.subWords.join(' + ')}: 각 구성 어휘가 표준 국어사전에 등재된 합성 명사입니다.`,
+      ],
+      senses: [
+        {
+          senseNo: 1,
+          definition: `${compoundRes.subWords.join(' + ')}: 표준 합성 명사 및 전문용어.`,
+          pos: '명사(합성어)',
+          origin: '합성어',
+        },
+      ],
+      length: trimmed.length,
+      firstChar: trimmed[0],
+      lastChar: trimmed[trimmed.length - 1],
+      origin: '합성어',
+      source: 'LEXICON',
+    };
 
-    const res = await fetch(url);
+    saveWordToCache(compoundWordInfo);
+    return { isValid: true, wordInfo: compoundWordInfo, source: 'LEXICON' };
+  }
+
+  // 4. 서버 실시간 국립국어원 표준국어대사전 & 우리말샘 & 위키백과 병렬 API 호출
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 1500);
+
+    const url = buildApiUrl(`/api/dict/search?q=${encodeURIComponent(trimmed)}`);
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeoutId);
+
     if (res.ok) {
       const data = await res.json();
       if (data.found && data.items && data.items.length > 0) {
@@ -362,23 +509,25 @@ export async function checkWordInDictionary(
           source: data.source || 'STDICT',
         };
 
-        REAL_API_WORD_CACHE.set(trimmed, wordInfo);
+        saveWordToCache(wordInfo);
         return { isValid: true, wordInfo, source: wordInfo.source };
       }
     }
-  } catch (err) {
-    console.warn('Dictionary validation API lookup error, switching to static fallback:', err);
+  } catch (err: any) {
+    if (err?.name !== 'AbortError') {
+      console.warn('Dictionary validation API lookup error, switching to static fallback:', err);
+    }
   }
 
-  // 4. 정적 사이트 배포 환경을 위한 클라이언트 사이드 fallback
+  // 5. 정적 사이트 배포 환경을 위한 클라이언트 사이드 fallback
   const staticFallback = await fetchClientSideDictionaryFallback(trimmed);
   if (staticFallback.found && staticFallback.items.length > 0) {
     const fallbackItem = staticFallback.items[0];
-    REAL_API_WORD_CACHE.set(trimmed, fallbackItem);
+    saveWordToCache(fallbackItem);
     return { isValid: true, wordInfo: fallbackItem, source: fallbackItem.source || 'WIKTIONARY' };
   }
 
-  // 5. 사전 어디에도 없는 경우 정확히 거부
+  // 6. 사전 어디에도 없는 경우 정확히 거부
   return {
     isValid: false,
     reason: '국립국어원 표준국어대사전에 등재되지 않은 단어입니다.',

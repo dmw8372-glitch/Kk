@@ -368,7 +368,7 @@ export function App() {
     }
   }, [activeRoom?.status]);
 
-  // Check URL params for ?room=XXXXXX (e.g. from share link)
+  // Check URL params for ?room=XXXX (e.g. from share link or page refresh)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const roomParam = params.get('room');
@@ -377,6 +377,45 @@ export function App() {
     }
   }, []);
 
+  // Synchronize browser URL query parameter with active room
+  useEffect(() => {
+    try {
+      const url = new URL(window.location.href);
+      if (activeRoom?.id) {
+        if (url.searchParams.get('room') !== activeRoom.id) {
+          url.searchParams.set('room', activeRoom.id);
+          window.history.replaceState(null, '', url.toString());
+        }
+      } else {
+        if (url.searchParams.has('room')) {
+          url.searchParams.delete('room');
+          window.history.replaceState(null, '', url.pathname + (url.search ? url.search : ''));
+        }
+      }
+    } catch {}
+  }, [activeRoom?.id]);
+
+  // Tab close or window navigation leave notification via sendBeacon
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (activeRoom?.id) {
+        try {
+          const leaveUrl = buildApiUrl('/api/rooms/leave');
+          const payload = JSON.stringify({ roomId: activeRoom.id, playerId: myPlayerId });
+          if (navigator.sendBeacon) {
+            const blob = new Blob([payload], { type: 'application/json' });
+            navigator.sendBeacon(leaveUrl, blob);
+          }
+        } catch {}
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [activeRoom?.id, myPlayerId]);
+
   // Real-time In-Room Server-Sent Events (SSE) stream (Sub-50ms instant sync across all players)
   useEffect(() => {
     if (!activeRoom?.id) return;
@@ -384,7 +423,9 @@ export function App() {
     let es: EventSource | null = null;
     try {
       if (typeof window !== 'undefined' && 'EventSource' in window) {
-        const streamUrl = buildApiUrl(`/api/rooms/${encodeURIComponent(activeRoom.id)}/stream`);
+        const streamUrl = buildApiUrl(
+          `/api/rooms/${encodeURIComponent(activeRoom.id)}/stream?playerId=${encodeURIComponent(myPlayerId)}`
+        );
         es = new EventSource(streamUrl);
         es.addEventListener('SYNC_ROOM', (e) => {
           try {
@@ -443,7 +484,7 @@ export function App() {
         } catch {}
       }
     };
-  }, [activeRoom?.id]);
+  }, [activeRoom?.id, myPlayerId]);
 
   // Save room state to server
   const saveRoomToServer = async (room: GameRoom) => {
@@ -850,7 +891,7 @@ export function App() {
     isPublic: boolean = true,
     totalRounds: number = 3
   ) => {
-    const newRoomId = Math.random().toString(36).substring(2, 8).toUpperCase();
+    const newRoomId = Math.floor(1000 + Math.random() * 9000).toString();
 
     const hostPlayer: Player = {
       id: myPlayerId,
@@ -1502,6 +1543,7 @@ export function App() {
         })),
       };
       setActiveRoom(resetRoom);
+      sendRoomAction('RESET_GAME', {});
       saveRoomToServer(resetRoom);
       broadcastRoomEvent('SYNC_ROOM', { room: resetRoom });
     }
@@ -1735,6 +1777,7 @@ export function App() {
               })),
             };
             setActiveRoom(resetRoom);
+            sendRoomAction('RESET_GAME', {});
             saveRoomToServer(resetRoom);
             broadcastRoomEvent('SYNC_ROOM', { room: resetRoom });
           }}
