@@ -17,7 +17,7 @@ import { LegalDocumentModal, LegalDocType } from './components/LegalDocumentModa
 import { UserStats, GameRoom, Player, ChatMessage, WordChainItem } from './types';
 import { supabase } from './lib/supabaseClient';
 import { sounds } from './lib/soundEffects';
-import { buildApiUrl, DEFAULT_SEED_ROOMS } from './lib/apiHelper';
+import { buildApiUrl } from './lib/apiHelper';
 
 // Initial default user state
 const INITIAL_STATS: UserStats = {
@@ -79,7 +79,7 @@ export function App() {
   // Navigation & View state
   const [currentTab, setCurrentTab] = useState<string>('HOME');
   const [activeRoom, setActiveRoom] = useState<GameRoom | null>(null);
-  const [publicRooms, setPublicRooms] = useState<GameRoom[]>(DEFAULT_SEED_ROOMS);
+  const [publicRooms, setPublicRooms] = useState<GameRoom[]>([]);
   const [isRefreshingRooms, setIsRefreshingRooms] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [dictSearchWord, setDictSearchWord] = useState<string>('');
@@ -200,7 +200,7 @@ export function App() {
       });
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data.rooms) && data.rooms.length > 0) {
+        if (Array.isArray(data.rooms)) {
           const serverRooms: GameRoom[] = data.rooms.map((r: any) => ({
             id: r.id,
             title: r.title,
@@ -235,8 +235,7 @@ export function App() {
         }
       }
     } catch (e) {
-      // Graceful fallback to default seed rooms if network is not ready
-      setPublicRooms((prev) => (prev.length > 0 ? prev : DEFAULT_SEED_ROOMS));
+      // Graceful error handling
     } finally {
       setIsRefreshingRooms(false);
     }
@@ -303,7 +302,7 @@ export function App() {
         es.addEventListener('ROOMS_UPDATED', (e) => {
           try {
             const data = JSON.parse(e.data);
-            if (Array.isArray(data.rooms) && data.rooms.length > 0) {
+            if (Array.isArray(data.rooms)) {
               setPublicRooms(data.rooms);
             }
           } catch {}

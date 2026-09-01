@@ -48,72 +48,6 @@ interface ServerGameRoom {
 
 const activeRoomsMap = new Map<string, ServerGameRoom>();
 
-// Seed default initial public rooms for instant gameplay and lively lobby
-const INITIAL_SEED_ROOMS: ServerGameRoom[] = [
-  {
-    id: 'KOREA1',
-    title: '🟢 [초보/모두 환영] 끝말잇기 한판!',
-    hostId: 'bot_host_1',
-    hostName: '초보도우미',
-    status: 'WAITING',
-    currentPlayers: [
-      {
-        id: 'bot_host_1',
-        nickname: '초보도우미',
-        avatarColor: 'mint',
-        isHost: true,
-        isReady: true,
-        isAlive: true,
-        score: 0,
-        wordsUsed: [],
-        level: 3,
-      },
-    ],
-    maxPlayers: 8,
-    isPublic: true,
-    turnDuration: 15.0,
-    round: 1,
-    currentTurnIndex: 0,
-    usedWords: [],
-    wordChain: [],
-    lastUpdated: Date.now(),
-    createdAt: Date.now(),
-  },
-  {
-    id: 'SPEED9',
-    title: '⚡ [스피드전] 5초 타임어택 대전',
-    hostId: 'bot_host_2',
-    hostName: '스피드킹',
-    status: 'WAITING',
-    currentPlayers: [
-      {
-        id: 'bot_host_2',
-        nickname: '스피드킹',
-        avatarColor: 'yellow',
-        isHost: true,
-        isReady: true,
-        isAlive: true,
-        score: 0,
-        wordsUsed: [],
-        level: 5,
-      },
-    ],
-    maxPlayers: 8,
-    isPublic: true,
-    turnDuration: 15.0,
-    round: 1,
-    currentTurnIndex: 0,
-    usedWords: [],
-    wordChain: [],
-    lastUpdated: Date.now(),
-    createdAt: Date.now(),
-  },
-];
-
-for (const seedRoom of INITIAL_SEED_ROOMS) {
-  activeRoomsMap.set(seedRoom.id, seedRoom);
-}
-
 // SSE Connected Clients Map
 const roomSseClientsMap = new Map<string, Set<express.Response>>();
 const lobbySseClients = new Set<express.Response>();
@@ -160,12 +94,11 @@ function findRoom(roomId: string): ServerGameRoom | undefined {
   return undefined;
 }
 
-// Clean up stale non-seed rooms (older than 2 hours without update)
+// Clean up stale rooms (older than 2 hours without update)
 setInterval(() => {
   const now = Date.now();
   for (const [id, room] of activeRoomsMap.entries()) {
-    const isSeed = INITIAL_SEED_ROOMS.some((s) => s.id === id);
-    if (!isSeed && now - (room.lastUpdated || room.createdAt) > 2 * 60 * 60 * 1000) {
+    if (now - (room.lastUpdated || room.createdAt) > 2 * 60 * 60 * 1000) {
       activeRoomsMap.delete(id);
       broadcastToLobby('ROOMS_UPDATED', { rooms: getPublicRoomsList() });
     }
