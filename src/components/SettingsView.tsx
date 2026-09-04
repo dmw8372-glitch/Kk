@@ -262,15 +262,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </div>
 
               <div className="text-center sm:text-left">
-                <div className="text-xs font-bold text-slate-400 mb-0.5">현재 레벨</div>
-                <div className="text-lg font-black text-[#1e2022] flex items-center gap-1 justify-center sm:justify-start">
-                  Lv. {userStats.level}
-                  <span className="text-xs font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full">
-                    EXP {userStats.exp}
-                  </span>
+                <div className="text-lg font-black text-[#1e2022]">
+                  {userStats.nickname}
                 </div>
                 <div className="text-xs text-slate-500 mt-1">
-                  승리 <strong>{userStats.wins}회</strong> • 승률 <strong>{userStats.winRate}%</strong>
+                  승리 <strong>{userStats.wins}회</strong> • 승률 <strong>{userStats.winRate}%</strong> • 최고 연승 <strong>{userStats.maxStreak}연승</strong>
                 </div>
               </div>
             </div>

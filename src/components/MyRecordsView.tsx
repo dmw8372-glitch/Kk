@@ -19,9 +19,6 @@ export const MyRecordsView: React.FC<MyRecordsViewProps> = ({ userStats, onSelec
             <h1 className="font-black text-2xl text-[#1e2022]">
               {userStats.nickname}
             </h1>
-            <span className="px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-700 font-extrabold text-xs">
-              Lv.{userStats.level}
-            </span>
           </div>
           <p className="text-xs text-slate-500 font-medium mb-4">
             끝잇기에서 기록한 개인 전적 및 사용한 단어 히스토리입니다.
@@ -30,7 +27,7 @@ export const MyRecordsView: React.FC<MyRecordsViewProps> = ({ userStats, onSelec
           {/* Quick Stat Badges */}
           <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3 text-xs font-bold">
             <span className="px-3 py-1.5 rounded-xl bg-purple-50 text-purple-700">
-              경험치: {userStats.exp} EXP
+              총 게임: {userStats.totalGames}전 {userStats.wins}승
             </span>
             <span className="px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700">
               최고 연승: {userStats.maxStreak}연승 🔥

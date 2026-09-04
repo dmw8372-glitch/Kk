@@ -328,13 +328,10 @@ export const LobbyView: React.FC<LobbyViewProps> = ({
                       />
                     </div>
 
-                    {/* Nickname & Level */}
+                    {/* Nickname */}
                     <div className="w-full text-center border-t border-slate-100 pt-1.5">
                       <div className="font-extrabold text-xs text-[#1e2022] truncate">
                         {player.nickname}
-                      </div>
-                      <div className="text-[10px] text-slate-400 font-semibold">
-                        Lv.{player.level}
                       </div>
                     </div>
                   </>
