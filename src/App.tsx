@@ -8,6 +8,7 @@ import { GameRoomsView } from './components/GameRoomsView';
 import { DictionaryView } from './components/DictionaryView';
 import { MyRecordsView } from './components/MyRecordsView';
 import { SettingsView } from './components/SettingsView';
+import { StartScreen } from './components/StartScreen';
 import { RulesModal } from './components/RulesModal';
 import { NoticeModal } from './components/NoticeModal';
 import { PublicRoomsModal } from './components/PublicRoomsModal';
@@ -18,6 +19,7 @@ import { UserStats, GameRoom, Player, ChatMessage, WordChainItem } from './types
 import { supabase } from './lib/supabaseClient';
 import { sounds } from './lib/soundEffects';
 import { buildApiUrl } from './lib/apiHelper';
+import { calculateWordScore } from './lib/scoreCalculator';
 
 // Initial default user state
 const INITIAL_STATS: UserStats = {
@@ -77,6 +79,9 @@ export function App() {
   };
 
   // Navigation & View state
+  const [isStarted, setIsStarted] = useState<boolean>(() => {
+    return sessionStorage.getItem('kkeutitgi_started') === 'true';
+  });
   const [currentTab, setCurrentTab] = useState<string>('HOME');
   const [activeRoom, setActiveRoom] = useState<GameRoom | null>(null);
   const [publicRooms, setPublicRooms] = useState<GameRoom[]>([]);
@@ -1251,7 +1256,8 @@ export function App() {
     const activePlayer = activeRoom.currentPlayers[activeRoom.currentTurnIndex];
     if (!activePlayer) return;
 
-    const earnedPoints = word.length * 10 + (isDueum ? 5 : 0);
+    const scoreBreakdown = calculateWordScore(word, isDueum);
+    const earnedPoints = scoreBreakdown.total;
 
     const newChainItem: WordChainItem = {
       id: 'chain_' + Date.now(),
@@ -1263,6 +1269,8 @@ export function App() {
       matchedChar,
       definition,
       pos,
+      earnedPoints,
+      scoreBonusLabel: scoreBreakdown.label,
     };
 
     const updatedPlayers = activeRoom.currentPlayers.map((p, idx) => {
@@ -1432,6 +1440,7 @@ export function App() {
 
         return {
           ...prev,
+          score: isMeWinner ? prev.score + 500 : Math.max(0, prev.score - 500),
           totalGames: newTotal,
           wins: newWins,
           winRate: newRate,
@@ -1491,7 +1500,7 @@ export function App() {
       }
     }
     setActiveRoom(null);
-    setCurrentTab('GAME');
+    setCurrentTab('HOME');
     refreshPublicRooms();
   };
 
@@ -1550,7 +1559,21 @@ export function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f8f9fc] text-[#1e2022] flex flex-col font-sans selection:bg-purple-200">
+    <div className="min-h-screen bg-white text-[#1e2022] flex flex-col font-sans selection:bg-emerald-200">
+      {/* Initial Landing Start Screen (Image 1 Splash) */}
+      {!isStarted && (
+        <StartScreen
+          nickname={userStats.nickname}
+          avatarColor={userStats.avatarColor || 'yellow'}
+          onStartGame={() => {
+            setIsStarted(true);
+            try {
+              sessionStorage.setItem('kkeutitgi_started', 'true');
+            } catch (e) {}
+          }}
+        />
+      )}
+
       {/* Top Navigation Header (Hidden during active gameplay for zero distraction as requested) */}
       {!isPlaying && (
         <Header
@@ -1567,19 +1590,7 @@ export function App() {
       )}
 
       {/* Main Container Layout */}
-      <main className={`flex-1 max-w-7xl w-full mx-auto flex flex-col lg:flex-row ${isPlaying ? 'p-2 sm:p-4' : 'px-4 sm:px-6 py-6 gap-6'}`}>
-        {/* Left Sidebar (Only visible when not in an active room) */}
-        {!activeRoom && (
-          <Sidebar
-            currentTab={currentTab}
-            onSelectTab={(tab) => {
-              sounds.playPop();
-              setCurrentTab(tab);
-            }}
-            userStats={userStats}
-          />
-        )}
-
+      <main className={`flex-1 max-w-7xl w-full mx-auto flex flex-col ${isPlaying ? 'p-2 sm:p-4' : 'px-4 sm:px-6 py-6'}`}>
         {/* Center Content Router */}
         <div className="flex-1 w-full overflow-hidden">
           {activeRoom ? (
@@ -1608,37 +1619,83 @@ export function App() {
                 onLeaveRoom={handleLeaveRoom}
               />
             )
-          ) : currentTab === 'HOME' ? (
-            <HomeView
-              userStats={userStats}
-              onCreateRoom={() => setCurrentTab('GAME')}
-              onOpenPublicRooms={() => setCurrentTab('GAME')}
-              onOpenQuickJoin={() => setCurrentTab('GAME')}
-              onSelectTab={setCurrentTab}
-              onViewWordDetail={handleViewWordDetail}
-              onOpenNotices={() => setIsNoticeOpen(true)}
-              onOpenRules={() => setIsRulesOpen(true)}
-            />
-          ) : currentTab === 'GAME' ? (
-            <GameRoomsView
-              publicRooms={publicRooms}
-              userStats={userStats}
-              onRefreshRooms={refreshPublicRooms}
-              isRefreshing={isRefreshingRooms}
-              onCreateRoom={handleCreateRoom}
-              onJoinRoom={handleJoinRoom}
-            />
-          ) : currentTab === 'DICT' ? (
-            <DictionaryView initialSearch={dictSearchWord} />
-          ) : currentTab === 'SETTINGS' ? (
-            <SettingsView
-              userStats={userStats}
-              onUpdateUserStats={(updated) => setUserStats((prev) => ({ ...prev, ...updated }))}
-              onResetStats={handleResetStats}
-              onOpenRules={() => setIsRulesOpen(true)}
-            />
           ) : (
-            <MyRecordsView userStats={userStats} onSelectTab={setCurrentTab} />
+            <>
+              {/* Base Home Screen */}
+              <HomeView
+                userStats={userStats}
+                onCreateRoom={() => setCurrentTab('GAME')}
+                onOpenPublicRooms={() => setCurrentTab('GAME')}
+                onOpenQuickJoin={() => setCurrentTab('GAME')}
+                onSelectTab={setCurrentTab}
+                onViewWordDetail={handleViewWordDetail}
+                onOpenNotices={() => setIsNoticeOpen(true)}
+                onOpenRules={() => setIsRulesOpen(true)}
+              />
+
+              {/* Floating Game Rooms Overlay */}
+              {currentTab === 'GAME' && (
+                <GameRoomsView
+                  publicRooms={publicRooms}
+                  userStats={userStats}
+                  onRefreshRooms={refreshPublicRooms}
+                  isRefreshing={isRefreshingRooms}
+                  onCreateRoom={handleCreateRoom}
+                  onJoinRoom={handleJoinRoom}
+                  onClose={() => setCurrentTab('HOME')}
+                />
+              )}
+
+              {/* Floating Dictionary Overlay */}
+              {currentTab === 'DICT' && (
+                <DictionaryView 
+                  initialSearch={dictSearchWord} 
+                  onClose={() => setCurrentTab('HOME')}
+                />
+              )}
+
+              {/* Settings / MyRecords View */}
+              {currentTab === 'SETTINGS' && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
+                  <div className="w-full max-w-2xl bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+                    <div className="overflow-y-auto flex-1">
+                      <SettingsView
+                        userStats={userStats}
+                        onUpdateUserStats={(updated) => setUserStats((prev) => ({ ...prev, ...updated }))}
+                        onResetStats={handleResetStats}
+                        onOpenRules={() => setIsRulesOpen(true)}
+                      />
+                    </div>
+                    <div className="p-3 bg-slate-50 border-t border-slate-200 text-center shrink-0">
+                      <button
+                        onClick={() => setCurrentTab('HOME')}
+                        className="px-6 py-2 bg-slate-800 hover:bg-black text-white font-bold rounded-xl text-xs cursor-pointer transition-colors"
+                      >
+                        닫기
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {currentTab === 'MY' && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
+                  <div className="w-full max-w-2xl bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+                    <div className="overflow-y-auto flex-1 p-2">
+                      <MyRecordsView userStats={userStats} onSelectTab={setCurrentTab} />
+                    </div>
+                    <div className="p-3 bg-slate-50 border-t border-slate-200 text-center shrink-0">
+                      <button
+                        onClick={() => setCurrentTab('HOME')}
+                        className="px-6 py-2 bg-slate-800 hover:bg-black text-white font-bold rounded-xl text-xs cursor-pointer transition-colors"
+                      >
+                        닫기
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       </main>

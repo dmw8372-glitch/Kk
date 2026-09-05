@@ -4,7 +4,8 @@ import { Send, MessageCircle, AlertCircle, CheckCircle2, XCircle, BookOpen, Volu
 import { GameRoom, Player, ChatMessage, WordChainItem } from '../types';
 import { MascotAvatar } from './MascotAvatar';
 import { validateWordRules, getValidStartingChars } from '../lib/hangulRules';
-import { checkWordInDictionary, DICTIONARY_DATABASE } from '../lib/dictionaryData';
+import { checkWordInDictionary, prefetchWordInDictionary, DICTIONARY_DATABASE } from '../lib/dictionaryData';
+import { calculateWordScore } from '../lib/scoreCalculator';
 import { sounds } from '../lib/soundEffects';
 
 interface GameViewProps {
@@ -371,15 +372,14 @@ export const GameView: React.FC<GameViewProps> = ({
           {/* Exit Game / Leave Room */}
           <button
             onClick={() => {
-              if (window.confirm('게임을 나가시겠습니까? 진행 중인 점수는 저장되지 않을 수 있습니다.')) {
-                onLeaveRoom();
-              }
+              sounds.playPop();
+              onLeaveRoom();
             }}
-            className="flex items-center gap-1 px-2.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200/80 text-rose-700 font-bold text-xs transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200/80 text-rose-700 font-bold text-xs transition-colors cursor-pointer"
             title="방 나가기"
           >
             <LogOut className="w-4 h-4" />
-            <span className="hidden sm:inline">나가기</span>
+            <span>나가기</span>
           </button>
         </div>
       </div>
@@ -388,43 +388,43 @@ export const GameView: React.FC<GameViewProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-3 sm:gap-5">
         {/* Left 3 cols: Main Game Stage */}
         <div className="lg:col-span-3 flex flex-col gap-3 sm:gap-4">
-          {/* Word Board (Center Box) */}
-          <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-gradient-to-b from-[#2a1b10] via-[#1c120a] to-[#120b06] border-2 sm:border-4 border-[#8c6b3e] shadow-2xl p-4 sm:p-6 flex flex-col items-center justify-center min-h-[160px] sm:min-h-[210px]">
-            {/* Corner Decorative Rivets */}
-            <div className="absolute top-2 left-2 w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-[#e2b76b] border border-[#523e1b] shadow-inner" />
-            <div className="absolute top-2 right-2 w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-[#e2b76b] border border-[#523e1b] shadow-inner" />
-            <div className="absolute bottom-2 left-2 w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-[#e2b76b] border border-[#523e1b] shadow-inner" />
-            <div className="absolute bottom-2 right-2 w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-[#e2b76b] border border-[#523e1b] shadow-inner" />
+          {/* Word Board (Center Box - Bright White & Light Gray Modern Board) */}
+          <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-gradient-to-b from-white via-slate-50 to-slate-100 border-2 sm:border-3 border-slate-300 shadow-md p-4 sm:p-6 flex flex-col items-center justify-center min-h-[160px] sm:min-h-[210px]">
+            {/* Corner Decorative Dots */}
+            <div className="absolute top-3 left-3 w-2 h-2 rounded-full bg-slate-300" />
+            <div className="absolute top-3 right-3 w-2 h-2 rounded-full bg-slate-300" />
+            <div className="absolute bottom-3 left-3 w-2 h-2 rounded-full bg-slate-300" />
+            <div className="absolute bottom-3 right-3 w-2 h-2 rounded-full bg-slate-300" />
 
-            {/* Word Chain Trace (Previous Words) */}
+            {/* Word Chain Trace (Previous Words without score tags) */}
             <div className="flex items-center gap-1.5 mb-2 overflow-x-auto max-w-full pb-1 no-scrollbar px-2">
               {room.wordChain.length === 0 ? (
-                <span className="text-[11px] sm:text-xs text-amber-200/60 font-semibold">
+                <span className="text-[11px] sm:text-xs text-slate-400 font-semibold">
                   첫 단어를 입력하여 끝말잇기를 시작하세요!
                 </span>
               ) : (
                 room.wordChain.slice(-4).map((item, idx) => (
                   <div key={item.id} className="flex items-center gap-1 shrink-0">
-                    <span className="px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg bg-white/15 text-amber-200 text-xs sm:text-xs font-bold border border-white/10 whitespace-nowrap">
+                    <span className="px-2.5 py-1 rounded-xl bg-white text-slate-800 text-xs font-bold border border-slate-200 shadow-2xs whitespace-nowrap">
                       {item.word}
                     </span>
                     {idx < Math.min(room.wordChain.length - 1, 3) && (
-                      <span className="text-amber-400 text-xs font-black shrink-0">→</span>
+                      <span className="text-slate-400 text-xs font-black shrink-0">→</span>
                     )}
                   </div>
                 ))
               )}
             </div>
 
-            {/* Big Current Required Character Display (e.g. 「래」 or 「회」) */}
+            {/* Big Current Required Character Display (e.g. 「래」 or 「회」) in Crisp Black */}
             <div className="my-1 sm:my-2 flex flex-col items-center justify-center text-center">
               {lastChar ? (
                 <motion.div
                   key={lastChar}
-                  initial={{ scale: 0.75, opacity: 0 }}
+                  initial={{ scale: 0.8, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
                   transition={{ type: 'spring', damping: 15, stiffness: 300 }}
-                  className="text-5xl sm:text-6xl md:text-7xl font-black text-amber-400 tracking-normal leading-none select-none drop-shadow-[0_4px_16px_rgba(245,158,11,0.6)]"
+                  className="text-5xl sm:text-6xl md:text-7xl font-black text-slate-900 tracking-normal leading-none select-none drop-shadow-xs"
                 >
                   {lastChar}
                 </motion.div>
@@ -432,7 +432,7 @@ export const GameView: React.FC<GameViewProps> = ({
                 <motion.div
                   initial={{ scale: 0.9, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
-                  className="text-2xl sm:text-3xl font-extrabold text-amber-300 tracking-tight leading-snug select-none text-center"
+                  className="text-2xl sm:text-3xl font-black text-slate-800 tracking-tight leading-snug select-none text-center"
                 >
                   첫 단어 시작
                 </motion.div>
@@ -443,7 +443,7 @@ export const GameView: React.FC<GameViewProps> = ({
                 <motion.div
                   initial={{ y: 5, opacity: 0 }}
                   animate={{ y: 0, opacity: 1 }}
-                  className="mt-2 px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-extrabold text-[10px] sm:text-xs shadow-md flex items-center gap-1 whitespace-nowrap"
+                  className="mt-2 px-3 py-1 rounded-full bg-slate-800 text-white font-extrabold text-[10px] sm:text-xs shadow-xs flex items-center gap-1 whitespace-nowrap"
                 >
                   <Sparkles className="w-3 h-3 text-amber-300 shrink-0" />
                   <span>두음법칙: 「{validChars.join(' / ')}」 가능</span>
@@ -454,20 +454,20 @@ export const GameView: React.FC<GameViewProps> = ({
             {/* Dynamic Countdown Progress Bar */}
             <div className="w-full max-w-md mt-2 sm:mt-3">
               <div className="flex justify-between items-center text-[10px] sm:text-xs font-extrabold mb-1">
-                <span className={`flex items-center gap-1 transition-colors ${timeLeft <= Math.min(2.5, maxTurnDuration * 0.3) ? 'text-rose-400 animate-pulse' : 'text-amber-200'}`}>
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping" />
-                  남은 시간 <span className="text-[9px] text-amber-300/80 font-normal">({maxTurnDuration.toFixed(1)}s)</span>
+                <span className={`flex items-center gap-1 transition-colors ${timeLeft <= Math.min(2.5, maxTurnDuration * 0.3) ? 'text-rose-600 animate-pulse' : 'text-slate-600'}`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${timeLeft <= Math.min(2.5, maxTurnDuration * 0.3) ? 'bg-rose-500 animate-ping' : 'bg-slate-700'}`} />
+                  남은 시간 <span className="text-[9px] text-slate-400 font-normal">({maxTurnDuration.toFixed(1)}s)</span>
                 </span>
-                <span className={`font-mono text-xs sm:text-sm font-black ${timeLeft <= Math.min(2.5, maxTurnDuration * 0.3) ? 'text-rose-400 animate-pulse' : 'text-amber-300'}`}>
+                <span className={`font-mono text-xs sm:text-sm font-black ${timeLeft <= Math.min(2.5, maxTurnDuration * 0.3) ? 'text-rose-600 animate-pulse' : 'text-slate-800'}`}>
                   {timeLeft.toFixed(1)}s
                 </span>
               </div>
-              <div className="w-full h-2.5 sm:h-3 bg-black/60 rounded-full overflow-hidden p-0.5 border border-amber-900/50">
+              <div className="w-full h-2.5 sm:h-3 bg-slate-200 rounded-full overflow-hidden p-0.5 border border-slate-300">
                 <div
                   className={`h-full rounded-full transition-all duration-100 ${
                     timeLeft <= Math.min(2.5, maxTurnDuration * 0.3)
-                      ? 'bg-gradient-to-r from-rose-600 to-red-500 shadow-lg shadow-rose-500/50'
-                      : 'bg-gradient-to-r from-amber-400 to-yellow-300 shadow-md shadow-amber-400/30'
+                      ? 'bg-rose-500 shadow-sm'
+                      : 'bg-slate-800'
                   }`}
                   style={{ width: `${Math.min(100, Math.max(0, (timeLeft / maxTurnDuration) * 100))}%` }}
                 />
@@ -595,8 +595,13 @@ export const GameView: React.FC<GameViewProps> = ({
                   type="text"
                   value={inputText}
                   onChange={(e) => {
-                    setInputText(e.target.value);
+                    const val = e.target.value;
+                    setInputText(val);
                     if (validationError) setValidationError(null);
+                    const cleanVal = val.trim();
+                    if (cleanVal.length >= 2) {
+                      prefetchWordInDictionary(cleanVal);
+                    }
                   }}
                   onKeyDown={handleInputKeyDown}
                   onCompositionStart={() => {
@@ -604,8 +609,13 @@ export const GameView: React.FC<GameViewProps> = ({
                   }}
                   onCompositionEnd={(e) => {
                     isComposingRef.current = false;
-                    if (e.currentTarget.value) {
-                      setInputText(e.currentTarget.value);
+                    const val = e.currentTarget.value || inputText;
+                    if (val) {
+                      setInputText(val);
+                      const cleanVal = val.trim();
+                      if (cleanVal.length >= 2) {
+                        prefetchWordInDictionary(cleanVal);
+                      }
                     }
                   }}
                   disabled={!isMyTurn}

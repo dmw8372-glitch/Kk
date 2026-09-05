@@ -161,6 +161,14 @@ DICTIONARY_DATABASE.forEach((w) => {
 // 실시간 API 조회된 단어 캐시 (중복 네트워크 요청 방지)
 export const REAL_API_WORD_CACHE = new Map<string, DictionaryWord>();
 
+// 백그라운드 프리패치 진행 중인 Promise 캐시 (동일 단어 중복 fetch 방지 및 전송 시 즉시 await 연결)
+const IN_FLIGHT_LOOKUPS = new Map<string, Promise<{
+  isValid: boolean;
+  wordInfo?: DictionaryWord;
+  reason?: string;
+  source?: 'STDICT' | 'WIKTIONARY' | 'LEXICON';
+}>>();
+
 const LOCAL_STORAGE_WORD_CACHE_KEY = 'kkeutitgi_verified_words_v3';
 
 // Load cached words from localStorage on module initialization for 0ms lookup
@@ -414,11 +422,38 @@ async function fetchClientSideDictionaryFallback(
 }
 
 /**
+ * 단어 백그라운드 프리패치 (2글자 이상 입력 시 즉시 호출되어 사전 검증을 미리 완료해둠)
+ * - 이미 메모리나 캐시에 있으면 네트워크 요청 생략
+ * - 아직 없으면 백그라운드에서 API 호출 후 캐시 저장
+ */
+export function prefetchWordInDictionary(word: string): void {
+  const trimmed = cleanDictWord(word);
+  if (trimmed.length < 2) return;
+
+  // 1. 이미 내장 사전 또는 캐시에 있으면 불필요
+  if (DICTIONARY_MAP.has(trimmed) || REAL_API_WORD_CACHE.has(trimmed)) {
+    return;
+  }
+
+  // 2. 이미 조회 진행 중이면 중복 요청 방지
+  if (IN_FLIGHT_LOOKUPS.has(trimmed)) {
+    return;
+  }
+
+  // 3. 백그라운드에서 즉시 조회 실행하여 캐시화
+  checkWordInDictionary(trimmed).catch(() => {
+    // 백그라운드 프리패치 에러 무시
+  });
+}
+
+/**
  * 단어 유효성 검사 및 국어사전 실시간 조회
- * 1. 내장 표준 어휘 데이터베이스 검사
- * 2. 캐시 검사
- * 3. /api/dict/search (국립국어원 표준국어대사전 Open API / Cloudflare Functions) 실시간 조회
- * 4. 정적 호스팅 시 클라이언트 사이드 fallback (위키낱말사전 + 확장 어휘 DB)
+ * 1. 내장 표준 어휘 데이터베이스 검사 (0ms)
+ * 2. 캐시 검사 (0ms)
+ * 3. 프리패치 진행 중인 요청이 있다면 해당 Promise를 즉시 재사용하여 지연 최소화
+ * 4. 복합어 / 합성어 형태소 분해 검증 (0ms)
+ * 5. /api/dict/search (국립국어원 표준국어대사전 Open API) 실시간 조회
+ * 6. 정적 호스팅 시 클라이언트 사이드 fallback (위키낱말사전 + 확장 어휘 DB)
  */
 export async function checkWordInDictionary(
   word: string
@@ -445,7 +480,12 @@ export async function checkWordInDictionary(
     return { isValid: true, wordInfo: cached, source: cached.source || 'STDICT' };
   }
 
-  // 3. 복합어 / 합성어 / 전문용어 형태소 분석 즉시 검증 (0ms) (예: 기체 크로마토그래피 분석법 -> [기체, 크로마토그래피, 분석법])
+  // 3. 현재 이미 백그라운드에서 조회 중인 동일 단어가 있다면 그 Promise를 기다림 (중복 호출 0ms)
+  if (IN_FLIGHT_LOOKUPS.has(trimmed)) {
+    return IN_FLIGHT_LOOKUPS.get(trimmed)!;
+  }
+
+  // 4. 복합어 / 합성어 / 전문용어 형태소 분석 즉시 검증 (0ms) (예: 기체 크로마토그래피 분석법 -> [기체, 크로마토그래피, 분석법])
   const compoundRes = checkCompoundWordDecomposition(trimmed);
   if (compoundRes.isCompound && compoundRes.subWords && compoundRes.subWords.length > 0) {
     const compoundWordInfo: DictionaryWord = {
@@ -474,64 +514,75 @@ export async function checkWordInDictionary(
     return { isValid: true, wordInfo: compoundWordInfo, source: 'LEXICON' };
   }
 
-  // 4. 서버 실시간 국립국어원 표준국어대사전 & 우리말샘 & 위키백과 병렬 API 호출
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 1500);
+  // 실제 비동기 조회 프로세스 정의
+  const lookupPromise = (async () => {
+    // 5. 서버 실시간 국립국어원 표준국어대사전 & 우리말샘 & 위키백과 병렬 API 호출
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 1200);
 
-    const url = buildApiUrl(`/api/dict/search?q=${encodeURIComponent(trimmed)}`);
-    const res = await fetch(url, { signal: controller.signal });
-    clearTimeout(timeoutId);
+      const url = buildApiUrl(`/api/dict/search?q=${encodeURIComponent(trimmed)}`);
+      const res = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeoutId);
 
-    if (res.ok) {
-      const data = await res.json();
-      if (data.found && data.items && data.items.length > 0) {
-        const item = data.items[0];
-        const wordInfo: DictionaryWord = {
-          word: item.word || trimmed,
-          supNo: item.supNo,
-          pos: item.pos || '명사',
-          meaning: item.meaning || '국립국어원 표준국어대사전에 등재된 표준어입니다.',
-          definitions: item.definitions || [item.meaning || '국립국어원 표준국어대사전에 등재된 표준어입니다.'],
-          senses: item.senses || [
-            {
-              senseNo: 1,
-              definition: item.meaning || '국립국어원 표준국어대사전에 등재된 표준어입니다.',
-              pos: item.pos || '명사',
-              origin: item.origin || '표준어',
-            },
-          ],
-          length: trimmed.length,
-          firstChar: trimmed[0],
-          lastChar: trimmed[trimmed.length - 1],
-          origin: item.origin || '표준어',
-          targetCode: item.targetCode,
-          source: data.source || 'STDICT',
-        };
+      if (res.ok) {
+        const data = await res.json();
+        if (data.found && data.items && data.items.length > 0) {
+          const item = data.items[0];
+          const wordInfo: DictionaryWord = {
+            word: item.word || trimmed,
+            supNo: item.supNo,
+            pos: item.pos || '명사',
+            meaning: item.meaning || '국립국어원 표준국어대사전에 등재된 표준어입니다.',
+            definitions: item.definitions || [item.meaning || '국립국어원 표준국어대사전에 등재된 표준어입니다.'],
+            senses: item.senses || [
+              {
+                senseNo: 1,
+                definition: item.meaning || '국립국어원 표준국어대사전에 등재된 표준어입니다.',
+                pos: item.pos || '명사',
+                origin: item.origin || '표준어',
+              },
+            ],
+            length: trimmed.length,
+            firstChar: trimmed[0],
+            lastChar: trimmed[trimmed.length - 1],
+            origin: item.origin || '표준어',
+            targetCode: item.targetCode,
+            source: data.source || 'STDICT',
+          };
 
-        saveWordToCache(wordInfo);
-        return { isValid: true, wordInfo, source: wordInfo.source };
+          saveWordToCache(wordInfo);
+          return { isValid: true, wordInfo, source: wordInfo.source };
+        }
+      }
+    } catch (err: any) {
+      if (err?.name !== 'AbortError') {
+        console.warn('Dictionary validation API lookup error, switching to static fallback:', err);
       }
     }
-  } catch (err: any) {
-    if (err?.name !== 'AbortError') {
-      console.warn('Dictionary validation API lookup error, switching to static fallback:', err);
+
+    // 6. 정적 사이트 배포 환경을 위한 클라이언트 사이드 fallback
+    const staticFallback = await fetchClientSideDictionaryFallback(trimmed);
+    if (staticFallback.found && staticFallback.items.length > 0) {
+      const fallbackItem = staticFallback.items[0];
+      saveWordToCache(fallbackItem);
+      return { isValid: true, wordInfo: fallbackItem, source: fallbackItem.source || 'WIKTIONARY' };
     }
-  }
 
-  // 5. 정적 사이트 배포 환경을 위한 클라이언트 사이드 fallback
-  const staticFallback = await fetchClientSideDictionaryFallback(trimmed);
-  if (staticFallback.found && staticFallback.items.length > 0) {
-    const fallbackItem = staticFallback.items[0];
-    saveWordToCache(fallbackItem);
-    return { isValid: true, wordInfo: fallbackItem, source: fallbackItem.source || 'WIKTIONARY' };
-  }
+    // 7. 사전 어디에도 없는 경우 정확히 거부
+    return {
+      isValid: false,
+      reason: '국립국어원 표준국어대사전에 등재되지 않은 단어입니다.',
+    };
+  })();
 
-  // 6. 사전 어디에도 없는 경우 정확히 거부
-  return {
-    isValid: false,
-    reason: '국립국어원 표준국어대사전에 등재되지 않은 단어입니다.',
-  };
+  IN_FLIGHT_LOOKUPS.set(trimmed, lookupPromise);
+  try {
+    const result = await lookupPromise;
+    return result;
+  } finally {
+    IN_FLIGHT_LOOKUPS.delete(trimmed);
+  }
 }
 
 /**

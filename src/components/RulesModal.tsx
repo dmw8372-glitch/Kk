@@ -63,6 +63,39 @@ export const RulesModal: React.FC<RulesModalProps> = ({ isOpen, onClose }) => {
             </div>
           </div>
 
+          {/* Word Length Score Bonus Table */}
+          <div className="bg-amber-50/70 rounded-2xl border border-amber-200/80 p-4">
+            <h3 className="font-extrabold text-sm text-amber-950 mb-2 flex items-center gap-1.5">
+              <span className="text-base">✨</span>
+              <span>글자 수 비례 보너스 점수 시스템</span>
+            </h3>
+            <p className="text-slate-600 mb-3 text-xs">
+              긴 단어를 구사할수록 폭발적으로 높은 점수와 승급 경험치를 획득합니다!
+            </p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
+              <div className="bg-white p-2.5 rounded-xl border border-amber-200">
+                <div className="text-[10px] text-slate-500 font-semibold">2글자</div>
+                <div className="font-extrabold text-slate-800 text-sm">30 pt</div>
+                <div className="text-[9px] text-slate-400">기본</div>
+              </div>
+              <div className="bg-white p-2.5 rounded-xl border border-amber-200">
+                <div className="text-[10px] text-amber-700 font-semibold">3~4글자</div>
+                <div className="font-extrabold text-purple-700 text-sm">55 ~ 90 pt</div>
+                <div className="text-[9px] text-purple-600 font-bold">+10~30 보너스</div>
+              </div>
+              <div className="bg-white p-2.5 rounded-xl border border-amber-200">
+                <div className="text-[10px] text-amber-700 font-semibold">5~6글자</div>
+                <div className="font-extrabold text-purple-700 text-sm">140 ~ 200 pt</div>
+                <div className="text-[9px] text-purple-600 font-bold">+65~110 콤보</div>
+              </div>
+              <div className="bg-white p-2.5 rounded-xl border border-amber-200 bg-gradient-to-b from-amber-50 to-amber-100">
+                <div className="text-[10px] text-amber-900 font-black">7글자 이상 (초장문)</div>
+                <div className="font-extrabold text-amber-900 text-sm">270 ~ 360+ pt</div>
+                <div className="text-[9px] text-amber-800 font-black">대폭발 보너스 🎉</div>
+              </div>
+            </div>
+          </div>
+
           {/* Interactive Dueum Rule Section (Section 3 & 4) */}
           <div className="bg-slate-50 rounded-2xl border border-slate-200/80 p-4">
             <h3 className="font-extrabold text-sm text-[#1e2022] mb-2 flex items-center gap-1.5">

@@ -61,6 +61,8 @@ export interface WordChainItem {
   matchedChar: string;
   definition?: string;
   pos?: string;
+  earnedPoints?: number;
+  scoreBonusLabel?: string;
   timestamp: number;
 }
 

@@ -151,11 +151,15 @@ export const LobbyView: React.FC<LobbyViewProps> = ({
 
           {/* Leave Room */}
           <button
-            onClick={onLeaveRoom}
-            className="p-1.5 sm:p-2 rounded-xl hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+            onClick={() => {
+              sounds.playPop();
+              onLeaveRoom();
+            }}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200/80 text-rose-700 font-bold text-xs transition-colors cursor-pointer"
             title="방 나가기"
           >
-            <LogOut className="w-4 h-4 sm:w-5 sm:h-5" />
+            <LogOut className="w-4 h-4 text-rose-600" />
+            <span>나가기</span>
           </button>
         </div>
       </div>
