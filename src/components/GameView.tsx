@@ -59,6 +59,25 @@ export const GameView: React.FC<GameViewProps> = ({
     sounds.startBGM('game');
   }, []);
 
+  // 0.5초(500ms) 주기 실시간 백그라운드 사전 프리패치
+  // 타자를 계속 치는 중이라도 0.5초마다 현재 입력값을 실시간으로 조회하여 캐시해두므로
+  // 사용자가 전송을 누르는 순간 지연(0ms) 없이 즉시 전송됩니다.
+  useEffect(() => {
+    const checkAndPrefetch = () => {
+      const liveVal = (inputRef.current?.value || inputText).trim();
+      if (liveVal.length >= 2) {
+        prefetchWordInDictionary(liveVal);
+      }
+    };
+
+    // 즉시 1회 사전 조회
+    checkAndPrefetch();
+
+    // 타자를 치는 동안 0.5초(500ms)마다 주기적으로 실시간 사전 조회
+    const intervalId = setInterval(checkAndPrefetch, 500);
+    return () => clearInterval(intervalId);
+  }, [inputText]);
+
   // Auto focus input on my turn
   useEffect(() => {
     if (isMyTurn) {
@@ -594,6 +613,12 @@ export const GameView: React.FC<GameViewProps> = ({
                   ref={inputRef}
                   type="text"
                   value={inputText}
+                  onInput={(e) => {
+                    const val = (e.target as HTMLInputElement).value;
+                    if (val && val.trim().length >= 2) {
+                      prefetchWordInDictionary(val.trim());
+                    }
+                  }}
                   onChange={(e) => {
                     const val = e.target.value;
                     setInputText(val);
@@ -606,6 +631,12 @@ export const GameView: React.FC<GameViewProps> = ({
                   onKeyDown={handleInputKeyDown}
                   onCompositionStart={() => {
                     isComposingRef.current = true;
+                  }}
+                  onCompositionUpdate={(e) => {
+                    const val = (e.target as HTMLInputElement).value;
+                    if (val && val.trim().length >= 2) {
+                      prefetchWordInDictionary(val.trim());
+                    }
                   }}
                   onCompositionEnd={(e) => {
                     isComposingRef.current = false;

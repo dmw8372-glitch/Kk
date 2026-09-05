@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Trophy, Users, Search, HelpCircle, MessageCircle } from 'lucide-react';
+import { Users, Search, HelpCircle, MessageCircle } from 'lucide-react';
 import { UserStats } from '../types';
 import { MascotAvatar } from './MascotAvatar';
 import { sounds } from '../lib/soundEffects';
@@ -24,29 +24,11 @@ export const HomeView: React.FC<HomeViewProps> = ({
 }) => {
   return (
     <div className="relative w-full min-h-[640px] bg-white p-2 sm:p-4 flex flex-col justify-between select-none">
-      {/* 1. TOP NOTICE CAPSULE (우측 상단 공지사항 바) */}
-      <div className="w-full flex justify-end items-center z-10 mb-2">
-        <motion.button
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          onClick={() => {
-            sounds.playPop();
-            onOpenNotices();
-          }}
-          className="flex items-center gap-2 px-4 py-2 rounded-full bg-black hover:bg-slate-900 text-white text-xs font-bold shadow-md cursor-pointer transition-all border border-slate-700"
-        >
-          <span className="text-amber-400 text-xs">📢</span>
-          <span className="text-amber-300 font-extrabold">[순위전]</span>
-          <span className="text-slate-100">베타 시즌 안내</span>
-          <span className="text-slate-400 text-[11px] ml-1">1일 전</span>
-        </motion.button>
-      </div>
-
-      {/* 2. MAIN LAYOUT: LEFT MENUS + ENLARGED CENTER CHARACTER MASCOT */}
+      {/* 1. MAIN LAYOUT: LEFT MENUS + ENLARGED CENTER CHARACTER MASCOT */}
       <div className="w-full flex-1 flex flex-col lg:flex-row items-center justify-between gap-8 my-auto relative z-10 py-6">
-        {/* LEFT COLUMN: 4 Feature Buttons */}
-        <div className="w-full lg:w-72 flex flex-col gap-3.5 z-20">
-          {/* Menu 1: 순위전 */}
+        {/* LEFT COLUMN: 3 Feature Buttons (순위전 제거됨) */}
+        <div className="w-full lg:w-80 flex flex-col gap-4 z-20">
+          {/* Menu 1: 친선전 */}
           <motion.button
             whileHover={{ scale: 1.03, x: 5 }}
             whileTap={{ scale: 0.97 }}
@@ -54,31 +36,34 @@ export const HomeView: React.FC<HomeViewProps> = ({
               sounds.playPop();
               onSelectTab('GAME');
             }}
-            className="w-full py-4 px-5 rounded-r-3xl rounded-l-2xl bg-gradient-to-r from-[#b7e4c7] via-[#d8f3dc] to-[#e8f5e9] text-[#1b4332] font-black text-lg sm:text-xl flex items-center justify-between shadow-sm border border-emerald-100 hover:shadow-md transition-all cursor-pointer text-left"
+            className="w-full py-4.5 px-5 rounded-r-3xl rounded-l-2xl bg-gradient-to-r from-[#fef08a] via-[#fef9c3] to-[#fffbeb] text-[#713f12] font-black text-lg sm:text-xl flex items-center justify-between shadow-sm border border-amber-200 hover:shadow-md transition-all cursor-pointer text-left"
           >
-            <div className="flex items-center gap-3">
-              <Trophy className="w-6 h-6 text-[#1b4332] stroke-[2.5]" />
-              <span>순위전</span>
+            <div className="flex items-center gap-3.5">
+              <Users className="w-6 h-6 text-[#713f12] stroke-[2.5]" />
+              <span>친선전</span>
             </div>
-            {/* Red Notification dot with badge */}
-            <div className="flex items-center gap-1.5 bg-black text-white px-2.5 py-1 rounded-full text-[11px] font-bold shadow-xs">
-              <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
-              <span>베타 시즌</span>
-            </div>
+            <span className="text-xs bg-amber-200/80 text-amber-900 px-2.5 py-1 rounded-full font-bold">
+              자유 대결
+            </span>
           </motion.button>
 
-          {/* Menu 2: 친선전 */}
+          {/* Menu 2: 낱말 사전 */}
           <motion.button
             whileHover={{ scale: 1.03, x: 5 }}
             whileTap={{ scale: 0.97 }}
             onClick={() => {
               sounds.playPop();
-              onSelectTab('GAME');
+              onSelectTab('DICT');
             }}
-            className="w-full py-4 px-5 rounded-r-3xl rounded-l-2xl bg-gradient-to-r from-[#fef08a] via-[#fef9c3] to-[#fffbeb] text-[#713f12] font-black text-lg sm:text-xl flex items-center gap-3 shadow-sm border border-amber-100 hover:shadow-md transition-all cursor-pointer text-left"
+            className="w-full py-4.5 px-5 rounded-r-3xl rounded-l-2xl bg-gradient-to-r from-[#f1f5f9] via-[#f8fafc] to-[#ffffff] text-[#1e293b] font-black text-lg sm:text-xl flex items-center justify-between shadow-sm border border-slate-200 hover:shadow-md transition-all cursor-pointer text-left"
           >
-            <Users className="w-6 h-6 text-[#713f12] stroke-[2.5]" />
-            <span>친선전</span>
+            <div className="flex items-center gap-3.5">
+              <Search className="w-6 h-6 text-[#1e293b] stroke-[2.5]" />
+              <span>낱말 사전</span>
+            </div>
+            <span className="text-xs bg-slate-200 text-slate-700 px-2.5 py-1 rounded-full font-bold">
+              50만 어휘
+            </span>
           </motion.button>
 
           {/* Menu 3: 튜토리얼 */}
@@ -89,24 +74,15 @@ export const HomeView: React.FC<HomeViewProps> = ({
               sounds.playPop();
               onOpenRules();
             }}
-            className="w-full py-4 px-5 rounded-r-3xl rounded-l-2xl bg-gradient-to-r from-[#ccfbf1] via-[#e6fffa] to-[#f0fdf4] text-[#115e59] font-black text-lg sm:text-xl flex items-center gap-3 shadow-sm border border-teal-100 hover:shadow-md transition-all cursor-pointer text-left"
+            className="w-full py-4.5 px-5 rounded-r-3xl rounded-l-2xl bg-gradient-to-r from-[#ccfbf1] via-[#e6fffa] to-[#f0fdf4] text-[#115e59] font-black text-lg sm:text-xl flex items-center justify-between shadow-sm border border-teal-100 hover:shadow-md transition-all cursor-pointer text-left"
           >
-            <HelpCircle className="w-6 h-6 text-[#115e59] stroke-[2.5]" />
-            <span>튜토리얼</span>
-          </motion.button>
-
-          {/* Menu 4: 낱말 사전 */}
-          <motion.button
-            whileHover={{ scale: 1.03, x: 5 }}
-            whileTap={{ scale: 0.97 }}
-            onClick={() => {
-              sounds.playPop();
-              onSelectTab('DICT');
-            }}
-            className="w-full py-4 px-5 rounded-r-3xl rounded-l-2xl bg-gradient-to-r from-[#f1f5f9] via-[#f8fafc] to-[#ffffff] text-[#334155] font-black text-lg sm:text-xl flex items-center gap-3 shadow-sm border border-slate-200 hover:shadow-md transition-all cursor-pointer text-left"
-          >
-            <Search className="w-6 h-6 text-[#334155] stroke-[2.5]" />
-            <span>낱말 사전</span>
+            <div className="flex items-center gap-3.5">
+              <HelpCircle className="w-6 h-6 text-[#115e59] stroke-[2.5]" />
+              <span>튜토리얼</span>
+            </div>
+            <span className="text-xs bg-teal-200/80 text-teal-900 px-2.5 py-1 rounded-full font-bold">
+              규칙 안내
+            </span>
           </motion.button>
         </div>
 
