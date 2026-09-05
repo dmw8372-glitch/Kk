@@ -83,7 +83,7 @@ export const ResultModal: React.FC<ResultModalProps> = ({
               transition={{ duration: 0.9, ease: 'easeOut' }}
               className="absolute top-2 right-4 px-2 py-0.5 rounded-full bg-rose-600 text-white font-black text-[10px] shadow-sm flex items-center gap-1"
             >
-              <span>-100점 감점</span>
+              <span>-600점 감점</span>
               <span>💥</span>
             </motion.div>
 

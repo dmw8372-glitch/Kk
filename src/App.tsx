@@ -26,6 +26,7 @@ const INITIAL_STATS: UserStats = {
   nickname: `손님${Math.floor(1000 + Math.random() * 9000)}`,
   level: 1,
   exp: 0,
+  score: 1000,
   avatarColor: 'white',
   totalGames: 0,
   wins: 0,
@@ -42,7 +43,12 @@ export function App() {
     const saved = localStorage.getItem('kkeutitgi_user_stats');
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        return {
+          ...INITIAL_STATS,
+          ...parsed,
+          score: typeof parsed.score === 'number' && !isNaN(parsed.score) ? parsed.score : 1000,
+        };
       } catch (e) {
         console.error(e);
       }
@@ -107,6 +113,48 @@ export function App() {
   // Supabase Realtime channel ref & authoritative activeRoom ref
   const channelRef = useRef<any>(null);
   const activeRoomRef = useRef<GameRoom | null>(activeRoom);
+  const processedGameKeyRef = useRef<string | null>(null);
+
+  // Universal Game Result Stats Processor (Fixes score deduction bug & enforces 600pt penalty on loss, 500pt bonus on win)
+  const applyGameResultStats = (finishedRoom: GameRoom) => {
+    if (!finishedRoom || finishedRoom.status !== 'FINISHED') return;
+    const gameKey = `${finishedRoom.id}_r${finishedRoom.round}_w_${finishedRoom.winner?.id || 'none'}_ts_${finishedRoom.startTime || finishedRoom.createdAt || 0}`;
+    if (processedGameKeyRef.current === gameKey) return;
+    processedGameKeyRef.current = gameKey;
+
+    const isMeWinner = finishedRoom.winner?.id === myPlayerId;
+    setUserStats((prev) => {
+      const currentScore = typeof prev.score === 'number' && !isNaN(prev.score) ? prev.score : 1000;
+      const newTotal = (prev.totalGames || 0) + 1;
+      const newWins = isMeWinner ? (prev.wins || 0) + 1 : (prev.wins || 0);
+      const newRate = Math.round((newWins / newTotal) * 100);
+      const newStreak = isMeWinner ? (prev.currentStreak || 0) + 1 : 0;
+      const newMaxStreak = Math.max(prev.maxStreak || 0, newStreak);
+      const newExp = (prev.exp || 0) + (isMeWinner ? 50 : 20);
+
+      let level = prev.level || 1;
+      let exp = newExp;
+      const expTarget = level * 100;
+      if (exp >= expTarget) {
+        level += 1;
+        exp -= expTarget;
+      }
+
+      return {
+        ...prev,
+        // 승리 시 +500점, 패배 시 정확히 -600점 차감 (최소 0점)
+        score: isMeWinner ? currentScore + 500 : Math.max(0, currentScore - 600),
+        totalGames: newTotal,
+        wins: newWins,
+        winRate: newRate,
+        currentStreak: newStreak,
+        maxStreak: newMaxStreak,
+        highestRank: isMeWinner ? 1 : 2,
+        exp,
+        level,
+      };
+    });
+  };
 
   useEffect(() => {
     activeRoomRef.current = activeRoom;
@@ -439,6 +487,7 @@ export function App() {
               setActiveRoom((prev) => normalizeRoomState(data.room, prev));
               if (data.room.status === 'FINISHED') {
                 setIsGameOverOpen(true);
+                applyGameResultStats(data.room);
               }
             }
           } catch {}
@@ -591,6 +640,7 @@ export function App() {
           setActiveRoom((prev) => normalizeRoomState(data.room, prev));
           if (data.room.status === 'FINISHED') {
             setIsGameOverOpen(true);
+            applyGameResultStats(data.room);
           }
         } else if (type === 'PLAYER_LEAVE' && data?.playerId) {
           const leaverId = data.playerId;
@@ -1216,6 +1266,7 @@ export function App() {
       startTime: Date.now(),
     };
 
+    processedGameKeyRef.current = null;
     setActiveRoom(updatedRoom);
     sounds.playPop();
     sendRoomAction('START_GAME', {
@@ -1421,36 +1472,8 @@ export function App() {
       setIsGameOverOpen(true);
       sendRoomAction('PLAYER_TIMEOUT', { targetPlayerId: playerId });
 
-      // Update user stats
-      setUserStats((prev) => {
-        const newTotal = prev.totalGames + 1;
-        const newWins = isMeWinner ? prev.wins + 1 : prev.wins;
-        const newRate = Math.round((newWins / newTotal) * 100);
-        const newStreak = isMeWinner ? prev.currentStreak + 1 : 0;
-        const newMaxStreak = Math.max(prev.maxStreak, newStreak);
-        const newExp = prev.exp + (isMeWinner ? 50 : 20);
-
-        let level = prev.level;
-        let exp = newExp;
-        const expTarget = level * 100;
-        if (exp >= expTarget) {
-          level += 1;
-          exp -= expTarget;
-        }
-
-        return {
-          ...prev,
-          score: isMeWinner ? prev.score + 500 : Math.max(0, prev.score - 500),
-          totalGames: newTotal,
-          wins: newWins,
-          winRate: newRate,
-          currentStreak: newStreak,
-          maxStreak: newMaxStreak,
-          highestRank: isMeWinner ? 1 : 2,
-          exp,
-          level,
-        };
-      });
+      // Apply universal game result stats
+      applyGameResultStats(finishedRoom);
 
       saveRoomToServer(finishedRoom);
       broadcastRoomEvent('SYNC_ROOM', { room: finishedRoom });
@@ -1530,6 +1553,7 @@ export function App() {
   // Instant Restart Game
   const handleRestartGame = () => {
     setIsGameOverOpen(false);
+    processedGameKeyRef.current = null;
     if (!activeRoom) return;
 
     if (activeRoom.hostId === myPlayerId) {

@@ -100,6 +100,7 @@ export interface UserStats {
   avatarColor: string;
   level: number;
   exp: number;
+  score: number;
   totalGames: number;
   wins: number;
   winRate: number;

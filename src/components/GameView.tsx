@@ -30,14 +30,47 @@ export const GameView: React.FC<GameViewProps> = ({
   const [inputText, setInputText] = useState('');
   const [validationError, setValidationError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [chatOpen, setChatOpen] = useState(true);
+  const [chatOpen, setChatOpen] = useState(false);
   const [chatInput, setChatInput] = useState('');
-  const chatBottomRef = useRef<HTMLDivElement>(null);
+  const chatScrollContainerRef = useRef<HTMLDivElement>(null);
+  const [latestChatToast, setLatestChatToast] = useState<{ id: string; sender: string; text: string } | null>(null);
+  const lastChatCountRef = useRef<number>(chatMessages.length);
+  const toastTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Auto-scroll chat to bottom on new messages
+  // Incoming chat message notification toast (5 seconds auto dismiss, placed under room code)
   useEffect(() => {
-    chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [chatMessages]);
+    if (chatMessages.length > lastChatCountRef.current) {
+      const latest = chatMessages[chatMessages.length - 1];
+      if (latest && latest.senderId !== currentPlayerId) {
+        setLatestChatToast({
+          id: latest.id,
+          sender: latest.senderName,
+          text: latest.text,
+        });
+
+        if (toastTimerRef.current) {
+          clearTimeout(toastTimerRef.current);
+        }
+        toastTimerRef.current = setTimeout(() => {
+          setLatestChatToast(null);
+        }, 5000);
+      }
+    }
+    lastChatCountRef.current = chatMessages.length;
+
+    // Scroll ONLY the internal chat container without moving the browser viewport/window
+    if (chatScrollContainerRef.current) {
+      chatScrollContainerRef.current.scrollTop = chatScrollContainerRef.current.scrollHeight;
+    }
+  }, [chatMessages, currentPlayerId]);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) {
+        clearTimeout(toastTimerRef.current);
+      }
+    };
+  }, []);
 
   // Dynamic Turn Duration: Starts at 15.0s, reduces by 0.4s per word in chain, min 5.0s
   const currentChainLength = room.wordChain ? room.wordChain.length : 0;
@@ -322,9 +355,9 @@ export const GameView: React.FC<GameViewProps> = ({
   return (
     <div className="flex flex-col gap-3 sm:gap-5 max-w-6xl mx-auto w-full">
       {/* Top In-Game Bar (Replaces global header during active gameplay for full focus) */}
-      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs px-3 sm:px-5 py-2 sm:py-3 flex items-center justify-between gap-2">
-        {/* Left info: Room Code & Round */}
-        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs px-3 sm:px-5 py-2 sm:py-3 flex items-center justify-between gap-2 relative">
+        {/* Left info: Room Code & Round with Floating Message Toast */}
+        <div className="relative flex items-center gap-2 sm:gap-3 shrink-0">
           <div className="flex items-center gap-1.5 bg-purple-50 border border-purple-200/80 px-2 sm:px-2.5 py-1 rounded-xl">
             <span className="w-2 h-2 rounded-full bg-purple-600 animate-pulse" />
             <span className="font-mono font-black text-sm sm:text-base text-purple-950 tracking-wider">
@@ -340,6 +373,35 @@ export const GameView: React.FC<GameViewProps> = ({
               생존 {room.currentPlayers.filter((p) => p.isAlive).length}/{room.currentPlayers.length}
             </span>
           </div>
+
+          {/* Small In-Game Chat Notification Toast (Directly under Room Code, truncated, 5s auto-dismiss) */}
+          <AnimatePresence>
+            {latestChatToast && (
+              <motion.div
+                key={latestChatToast.id}
+                initial={{ opacity: 0, y: -4, scale: 0.9 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -4, scale: 0.9 }}
+                transition={{ duration: 0.2 }}
+                className="absolute top-full left-0 mt-2 z-50 flex items-center gap-1.5 bg-[#1e2022]/95 text-white text-[11px] px-2.5 py-1.5 rounded-xl shadow-lg border border-slate-700/80 backdrop-blur-xs max-w-[210px] sm:max-w-[280px]"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0 animate-ping" />
+                <span className="font-extrabold text-amber-300 shrink-0 max-w-[60px] sm:max-w-[70px] truncate">
+                  {latestChatToast.sender}:
+                </span>
+                <span className="truncate text-slate-100 font-medium flex-1">
+                  {latestChatToast.text}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setLatestChatToast(null)}
+                  className="text-slate-400 hover:text-white p-0.5 ml-0.5 shrink-0 cursor-pointer text-[10px]"
+                >
+                  ✕
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         {/* Center: Round History Boxes (hidden on very small screens, visible on sm+) */}
@@ -748,7 +810,7 @@ export const GameView: React.FC<GameViewProps> = ({
               <h4 className="font-bold text-xs text-[#1e2022]">실시간 채팅</h4>
             </div>
 
-            <div className="flex-1 overflow-y-auto space-y-2 text-xs pr-1 min-h-0">
+            <div ref={chatScrollContainerRef} className="flex-1 overflow-y-auto space-y-2 text-xs pr-1 min-h-0">
               {chatMessages.map((msg) => (
                 <div
                   key={msg.id}
@@ -770,7 +832,6 @@ export const GameView: React.FC<GameViewProps> = ({
                   </div>
                 </div>
               ))}
-              <div ref={chatBottomRef} />
             </div>
 
             <form onSubmit={handleSendChat} className="pt-2 border-t border-slate-100 flex gap-1.5 mt-2 shrink-0">
